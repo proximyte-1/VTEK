@@ -1,0 +1,24 @@
+.back {
+  height: 3000px;
+}
+
+.app-container {
+  display: flex;
+  height: 3000px;
+  font-family: "Lucida Sans", "Lucida Sans Regular", "Lucida Grande",
+    "Lucida Sans Unicode", Geneva, Verdana, sans-serif;
+}
+
+/* Sidebar open on larger screens */
+@media (min-width: 768px) {
+  .app-container {
+    margin-left: 200px; /* Push content to the right */
+  }
+}
+
+/* When the sidebar is expanded on mobile */
+@media (max-width: 768px) {
+  .sidebar.open + .content {
+    margin-left: 200px;
+  }
+}
