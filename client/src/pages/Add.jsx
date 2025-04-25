@@ -31,7 +31,7 @@ const Add = () => {
     email: "",
     age: "",
     address: "",
-    report: true,
+    report: false,
   });
 
   function createData(kode_part, nama_part, c, qty, harga, total) {
