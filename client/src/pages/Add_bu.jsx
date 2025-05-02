@@ -24,7 +24,6 @@ import {
   TableBody,
   Link,
   CircularProgress,
-  InputAdornment,
 } from "@mui/material";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
@@ -332,7 +331,7 @@ const Add = () => {
                           sx={{ color: "rgba(0, 0, 0, 0.6)" }}
                           id="no_call"
                         >
-                          No. Pelapor
+                          No. Call
                         </Typography>
                         <TextField
                           variant="outlined"
@@ -340,16 +339,6 @@ const Add = () => {
                           value={formData.no_call}
                           name="no_call"
                           onChange={handleChange}
-                          type="number"
-                          slotProps={{
-                            input: {
-                              startAdornment: (
-                                <InputAdornment position="start">
-                                  +62
-                                </InputAdornment>
-                              ),
-                            },
-                          }}
                         />
                       </Grid>
 
@@ -435,8 +424,6 @@ const Add = () => {
                           fullWidth
                           value={formData.keluhan}
                           name="keluhan"
-                          multiline
-                          rows={3}
                           onChange={handleChange}
                         />
                       </Grid>

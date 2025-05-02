@@ -2,8 +2,9 @@ import http from "http";
 import sql from "mssql";
 import { parse } from "url";
 import { StringDecoder } from "string_decoder";
+import axios from "axios";
+import xml2js from "xml2js";
 import { Buffer } from "buffer";
-import { parseString } from "xml2js";
 
 const config = {
   server: "applserver02.perdana.net.id",
@@ -16,20 +17,43 @@ const config = {
   },
 };
 
-// NAV OData config
-const navOptions = {
-  hostname: "192.168.3.3",
-  // port: 5002,
-  // path: "/TEST/WS/PT.%20Perdana%20Jatiputra/Page/customer_list",
-  port: 5003,
-  path: "/TEST/OData/Company('PT.%20Perdana%20Jatiputra')/customer_list",
-  method: "GET",
-  headers: {
-    Accept: "application/json",
-    Authorization:
-      "Basic " +
-      Buffer.from("vincent.marcelino:vincent1234").toString("base64"), // ← replace with real credentials
-  },
+const url =
+  "http://applserver02.perdana.net.id:5002/TEST/WS/PT.%20Perdana%20Jatiputra/Page/customer_list";
+
+// Your SOAP envelope
+const soapEnvelope = `
+<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
+               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+  <soap:Body>
+    <ReadMultiple xmlns="urn:microsoft-dynamics-schemas/page/customer_list">
+    </ReadMultiple>
+  </soap:Body>
+</soap:Envelope>
+`;
+
+const fetchSOAPData = async () => {
+  axios
+    .post(url, soapEnvelope, {
+      headers: {
+        "Content-Type": "text/xml",
+        SOAPAction:
+          "urn:microsoft-dynamics-schemas/page/customer_list:ReadMultiple",
+      },
+      auth: {
+        username: "your_username", // Use full domain\username if needed
+        password: "your_password",
+      },
+    })
+    .then((res) => {
+      xml2js.parseString(res.data, { explicitArray: false }, (err, result) => {
+        if (err) return console.error("Parse error:", err);
+        console.log(JSON.stringify(result, null, 2));
+      });
+    })
+    .catch((err) => {
+      console.error("Request error:", err.message);
+    });
 };
 
 // Create server
@@ -69,57 +93,55 @@ const server = http.createServer((req, res) => {
       return res.end(JSON.stringify(result.recordset));
     }
 
-    // Route: NAV OData proxy
-    if (method === "GET" && path === "api/nav-data") {
-      // const proxyReq = http.request(navOptions, (proxyRes) => {
-      //   res.writeHead(proxyRes.statusCode, {
-      //     "Content-Type": "application/json",
-      //     "Access-Control-Allow-Origin": "*", // CORS header again for safety
-      //   });
+    if (method === "GET" && path === "api/get-flk") {
+      const result =
+        await sql.query`SELECT * FROM PJPNavisionExtension.dbo.WbVtk`;
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify(result.recordset));
+    }
 
-      //   proxyRes.pipe(res);
-      // });
+    if (method === "GET" && path === "api/get-no-rep") {
+      const result =
+        await sql.query`SELECT no_report FROM PJPNavisionExtension.dbo.WbVtk`;
+      res.writeHead(200, { "Content-Type": "application/json" });
+      fetchSOAPData();
+      return res.end(JSON.stringify(result.recordset));
+    }
 
-      // proxyReq.on("error", (err) => {
-      //   console.error("Error fetching NAV data:", err);
-      //   res.writeHead(500);
-      //   res.end(JSON.stringify({ error: "Failed to fetch NAV data" }));
-      // });
+    if (method === "POST" && path === "api/create-flk") {
+      try {
+        const data = JSON.parse(buffer);
 
-      // return proxyReq.end();
-      // // -------------------
+        console.log(data);
 
-      const proxyReq = http.request(navOptions, (proxyRes) => {
-        let xml = "";
+        const { nama, no_report, jam_dtg } = data;
 
-        proxyRes.on("data", (chunk) => {
-          xml += chunk.toString();
-        });
+        const result = await sql.query`
+          INSERT INTO PJPNavisionExtension.dbo.WbVtk (nama, no_report, jam_dtg)
+          VALUES (${nama}, ${no_report}, ${jam_dtg})
+        `;
 
-        proxyRes.on("end", () => {
-          parseString(xml, { explicitArray: false }, (err, result) => {
-            if (err) {
-              console.error("XML parsing error:", err);
-              res.writeHead(500);
-              return res.end(
-                JSON.stringify({ error: "Failed to parse NAV XML" })
-              );
-            }
-
-            res.writeHead(200, { "Content-Type": "application/json" });
-            console.log(JSON.stringify(result));
-            res.end(JSON.stringify(result));
-          });
-        });
-      });
-
-      proxyReq.on("error", (err) => {
-        console.error("Error fetching NAV data:", err);
+        res.writeHead(200);
+        return res.end(
+          JSON.stringify({
+            ok: true,
+            status: 1,
+            data: result.recordset,
+            message: "Data inserted successfully",
+          })
+        );
+      } catch (err) {
+        console.error(err);
         res.writeHead(500);
-        res.end(JSON.stringify({ error: "Failed to fetch NAV data" }));
-      });
-
-      return proxyReq.end();
+        return res.end(
+          JSON.stringify({
+            ok: false,
+            status: 0,
+            data: "",
+            message: "Insert failed",
+          })
+        );
+      }
     }
 
     // Fallback: Not found
