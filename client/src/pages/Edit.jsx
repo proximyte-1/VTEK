@@ -28,12 +28,14 @@ import {
 } from "@mui/material";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
-import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { ExpandMoreRounded } from "@mui/icons-material";
-import dayjs from "dayjs";
 import { useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import dayjs from "dayjs";
 
-const Add = () => {
+const Edit = () => {
+  const { id } = useParams();
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
@@ -91,7 +93,7 @@ const Add = () => {
 
   const [barang, setDataBarang] = useState([]);
   const [customer, setDataCustomer] = useState([]);
-  const [searched, setSearched] = useState(false);
+  const [searched, setSearched] = useState(true);
   const [loading, setLoading] = useState(false);
   const [data_no_rep, setDataNoRep] = useState([]);
   const [statusRes, setStatusRes] = useState([]);
@@ -101,21 +103,9 @@ const Add = () => {
     severity: "success", // 'success', 'error', 'warning', 'info'
   });
 
-  useEffect(() => {
-    async function fetchNoRep() {
-      try {
-        const response = await fetch(
-          import.meta.env.VITE_API_URL + `api/get-no-rep`
-        );
-        const data = await response.json();
-        setDataNoRep(data); // <-- set the array into state
-      } catch (error) {
-        console.error("Error fetching No Report:", error);
-      }
-    }
-
-    fetchNoRep();
-  }, []);
+  const displayValue = (value) => {
+    return value === null || value === undefined || value == "" ? "-" : value;
+  };
 
   const showAlert = (message, severity) => {
     setAlert({
@@ -129,42 +119,65 @@ const Add = () => {
     setAlert((prev) => ({ ...prev, open: false }));
   };
 
-  const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
-
-    if (e.target.name === "status_res") {
-      setStatusRes(e.target.value);
+  useEffect(() => {
+    async function fetchNoRep() {
+      try {
+        const response = await fetch(
+          import.meta.env.VITE_API_URL + "api/get-no-rep"
+        );
+        const data = await response.json();
+        setDataNoRep(data); // <-- set the array into state
+      } catch (error) {
+        console.error("Error fetching No Report:", error);
+      }
     }
-  };
 
-  async function fetchDataBarang(id) {
+    fetch(import.meta.env.VITE_API_URL + `api/get-flk-one-by-id?${id}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const datas = data[0];
+        if (datas && datas.no_rep) {
+          setFormData(() => ({
+            ...formData,
+            ...datas,
+            waktu_call: datas.waktu_call ? dayjs(datas.waktu_call) : null,
+            waktu_dtg: datas.waktu_dtg ? dayjs(datas.waktu_dtg) : null,
+            waktu_mulai: datas.waktu_mulai ? dayjs(datas.waktu_mulai) : null,
+            waktu_selesai: datas.waktu_selesai
+              ? dayjs(datas.waktu_selesai)
+              : null,
+          }));
+
+          //fetch data barang
+          fetchDataBarang(datas.no_rep);
+        } else {
+          console.error("No data found or no_rep is missing");
+        }
+      })
+      .catch((err) => console.error("Fetch failed", err));
+
+    fetchNoRep();
+  }, [id]);
+
+  const fetchDataBarang = async (id) => {
     try {
       const fetch_barang = await fetch(
-        import.meta.env.VITE_API_URL + `api/nav-data?id=${id}`
+        `http://localhost:3001/api/nav-data?id=${id}`
       );
       const data = await fetch_barang.json();
 
-      if (data.length <= 0) {
-        showAlert("Nomor Report Belum Ada Pada Navision !", "error");
-        setSearched(false);
-      } else {
-        showAlert("Nomor Report Belum Dipakai.", "success");
-        setSearched(true);
+      if (!data.length <= 0) {
         setDataBarang(data);
         setDataCustomer(data[0]);
-        // setReportKe(data[0]["d:Sell_to_Customer_No"]);
       }
     } catch (error) {
       console.error("Error fetching barang:", error);
     }
-  }
+  };
 
   const setReportKe = async (id_cus) => {
     const response = await fetch(
-      import.meta.env.VITE_API_URL + `api/get-rep-by-cus?id_cus=${id_cus}`
+      `http://localhost:3001/api/get-rep-by-cus?id_cus=${id_cus}`
     );
     const data = await response.json();
 
@@ -174,6 +187,28 @@ const Add = () => {
         ...formData,
         [rep_ke]: (data[0]["rep_ke"] || 0) + 1,
       });
+    }
+  };
+
+  const handleChange = (e) => {
+    const regex = /^[0-9]*$/;
+
+    if (e.target.name === "no_rep") {
+      if (regex.test(e.target.value)) {
+        setFormData({ ...formData, [e.target.name]: e.target.value });
+      } else {
+        showAlert("Hanya nomor yang diperbolehkan", "error");
+        return;
+      }
+    }
+
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value,
+    });
+
+    if (e.target.name === "status_res") {
+      setStatusRes(e.target.value);
     }
   };
 
@@ -226,7 +261,7 @@ const Add = () => {
           return;
         }
       }
-      console.log("selesai");
+
       setFormData({
         ...formData,
         [field]: newDate,
@@ -234,16 +269,12 @@ const Add = () => {
     }
   };
 
-  function displayValue(value) {
-    return value === null || value === undefined || value == "" ? "-" : value;
-  }
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     try {
       const response = await fetch(
-        import.meta.env.VITE_API_URL + `api/create-flk`,
+        import.meta.env.VITE_API_URL + `api/edit-flk?${id}`,
         {
           method: "POST",
           headers: {
@@ -259,14 +290,13 @@ const Add = () => {
           }),
         }
       );
-
       const result = await response.json();
 
       if (response.ok) {
         // Redirect to homepage after successful submission
         navigate("/", {
           state: {
-            message: "Data Form Laporan Kerja Berhasil Ditambahkan!",
+            message: "Data Form Laporan Kerja Berhasil Diubah!",
             severity: "success",
           },
         });
@@ -286,9 +316,9 @@ const Add = () => {
   return (
     <Paper sx={{ padding: 3 }} elevation={4}>
       <Typography variant="h5" marginBottom={"1.5em"} gutterBottom>
-        New Form Laporan Kerja
+        Edit Form Laporan Kerja
       </Typography>
-      <LocalizationProvider dateAdapter={AdapterDateFns}>
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
         <form onSubmit={handleSubmit}>
           <Grid container spacing={5} marginY={"2em"} alignItems="center">
             {/* Input Report */}
@@ -299,6 +329,7 @@ const Add = () => {
                 fullWidth
                 value={formData.no_rep}
                 name="no_rep"
+                // type="number"
                 onChange={handleChange}
                 slotProps={{
                   input: {
@@ -882,4 +913,4 @@ const Add = () => {
   );
 };
 
-export default Add;
+export default Edit;

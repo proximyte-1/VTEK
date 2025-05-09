@@ -33,11 +33,12 @@ import { ExpandMoreRounded } from "@mui/icons-material";
 import dayjs from "dayjs";
 import { useNavigate } from "react-router-dom";
 
-const Add = () => {
+const NoSeri = () => {
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
     no_rep: "",
+    no_seri: "",
     no_cus: "",
     no_call: "",
     pelapor: "",
@@ -93,29 +94,13 @@ const Add = () => {
   const [customer, setDataCustomer] = useState([]);
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [data_no_rep, setDataNoRep] = useState([]);
+  const [data_no_seri, setDataNoSeri] = useState([]);
   const [statusRes, setStatusRes] = useState([]);
   const [alert, setAlert] = useState({
     open: false,
     message: "",
     severity: "success", // 'success', 'error', 'warning', 'info'
   });
-
-  useEffect(() => {
-    async function fetchNoRep() {
-      try {
-        const response = await fetch(
-          import.meta.env.VITE_API_URL + `api/get-no-rep`
-        );
-        const data = await response.json();
-        setDataNoRep(data); // <-- set the array into state
-      } catch (error) {
-        console.error("Error fetching No Report:", error);
-      }
-    }
-
-    fetchNoRep();
-  }, []);
 
   const showAlert = (message, severity) => {
     setAlert({
@@ -128,6 +113,22 @@ const Add = () => {
   const handleCloseAlert = () => {
     setAlert((prev) => ({ ...prev, open: false }));
   };
+
+  // useEffect(() => {
+  //   async function fetchNoSeri() {
+  //     try {
+  //       const response = await fetch(
+  //         import.meta.env.VITE_API_URL + `api/get-no-rep`
+  //       );
+  //       const data = await response.json();
+  //       setDataNoRep(data);
+  //     } catch (error) {
+  //       console.error("Error fetching No Seri:", error);
+  //     }
+  //   }
+
+  //   fetchNoSeri();
+  // }, []);
 
   const handleChange = (e) => {
     setFormData({
@@ -143,15 +144,15 @@ const Add = () => {
   async function fetchDataBarang(id) {
     try {
       const fetch_barang = await fetch(
-        import.meta.env.VITE_API_URL + `api/nav-data?id=${id}`
+        import.meta.env.VITE_API_URL + `api/nav-data-noseri?id=${id}`
       );
       const data = await fetch_barang.json();
 
       if (data.length <= 0) {
-        showAlert("Nomor Report Belum Ada Pada Navision !", "error");
+        showAlert("Nomor Seri Belum Ada Pada Navision !", "error");
         setSearched(false);
       } else {
-        showAlert("Nomor Report Belum Dipakai.", "success");
+        showAlert("Nomor Seri Tersedia", "success");
         setSearched(true);
         setDataBarang(data);
         setDataCustomer(data[0]);
@@ -164,7 +165,7 @@ const Add = () => {
 
   const setReportKe = async (id_cus) => {
     const response = await fetch(
-      import.meta.env.VITE_API_URL + `api/get-rep-by-cus?id_cus=${id_cus}`
+      `http://localhost:3001/api/get-rep-by-cus?id_cus=${id_cus}`
     );
     const data = await response.json();
 
@@ -180,16 +181,18 @@ const Add = () => {
   const handleSearch = () => {
     setLoading(true);
 
-    if (!formData.no_rep) {
-      showAlert("Nomor Report Tidak Diperbolehkan Kosong.", "error");
+    if (!formData.no_seri) {
+      showAlert("Nomor Seri Tidak Diperbolehkan Kosong.", "error");
       setSearched(false);
       setLoading(false);
-    } else if (data_no_rep.some((item) => item.no_rep === formData.no_rep)) {
-      showAlert("Nomor Report Sudah Pernah Dipakai.", "error");
-      setSearched(false);
-      setLoading(false);
-    } else {
-      fetchDataBarang(formData.no_rep);
+    }
+    // else if (data_no_seri.some((item) => item.no_seri === formData.no_seri)) {
+    //   showAlert("Nomor Seri Sudah Pernah Dipakai.", "error");
+    //   setSearched(false);
+    //   setLoading(false);
+    // }
+    else {
+      fetchDataBarang(formData.no_seri);
       setLoading(false);
     }
   };
@@ -286,7 +289,7 @@ const Add = () => {
   return (
     <Paper sx={{ padding: 3 }} elevation={4}>
       <Typography variant="h5" marginBottom={"1.5em"} gutterBottom>
-        New Form Laporan Kerja
+        New Form Laporan Kerja -- Tanpa Barang
       </Typography>
       <LocalizationProvider dateAdapter={AdapterDateFns}>
         <form onSubmit={handleSubmit}>
@@ -294,19 +297,12 @@ const Add = () => {
             {/* Input Report */}
             <Grid size={{ xs: 12, md: 6 }}>
               <TextField
-                label="No. Report / No. Navision"
+                label="No. Seri"
                 variant="outlined"
                 fullWidth
-                value={formData.no_rep}
-                name="no_rep"
+                value={formData.no_seri}
+                name="no_seri"
                 onChange={handleChange}
-                slotProps={{
-                  input: {
-                    startAdornment: (
-                      <InputAdornment position="start">SPGFI</InputAdornment>
-                    ),
-                  },
-                }}
               />
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
@@ -882,4 +878,4 @@ const Add = () => {
   );
 };
 
-export default Add;
+export default NoSeri;

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { Link } from "react-router-dom";
 import { format } from "date-fns";
 import {
@@ -15,38 +15,10 @@ import {
   Typography,
   Snackbar,
   Alert,
-  Box,
 } from "@mui/material";
-import { DataGrid } from "@mui/x-data-grid";
 
 const Home = () => {
   const location = useLocation();
-  const navigate = useNavigate();
-
-  const columns = [
-    { field: "no_rep", headerName: "No Report", flex: 1 },
-    { field: "pelapor", headerName: "Nama Pelapor", flex: 1 },
-    { field: "waktu_mulai", headerName: "Waktu Mulai", flex: 1 },
-    { field: "waktu_selesai", headerName: "Waktu Selesai", flex: 1 },
-    {
-      field: "actions",
-      headerName: "Actions",
-      sortable: false,
-      filterable: false,
-      flex: 1,
-      renderCell: (params) => (
-        <>
-          <Button
-            variant="contained"
-            color="warning"
-            onClick={() => navigate(`/edit/id=${params.row.id}`)}
-          >
-            Edit
-          </Button>
-        </>
-      ),
-    },
-  ];
 
   const [open, setOpen] = useState(false);
   const [alertData, setAlertData] = useState({ message: "", severity: "info" });
@@ -55,9 +27,7 @@ const Home = () => {
   useEffect(() => {
     async function fetchDataFLK() {
       try {
-        const response = await fetch(
-          import.meta.env.VITE_API_URL + `api/get-flk`
-        );
+        const response = await fetch("http://localhost:3001/api/get-flk");
 
         const data = await response.json();
         setDatas(data); // <-- set the array into state
@@ -86,22 +56,6 @@ const Home = () => {
       <Typography variant="h4" gutterBottom>
         Home
       </Typography>
-
-      <DataGrid
-        rows={datas}
-        columns={columns}
-        getRowId={(row) => row.id} // <- replace with your actual unique field
-        initialState={{
-          pagination: {
-            paginationModel: {
-              pageSize: 5,
-            },
-          },
-        }}
-        pageSizeOptions={[5]}
-        checkboxSelection
-        disableRowSelectionOnClick
-      />
 
       {/* Table */}
       <TableContainer sx={{ padding: 3 }} component={Paper}>
@@ -144,7 +98,11 @@ const Home = () => {
                   </TableCell>
                   <TableCell>
                     <Link to={`/edit/id=${item.id}`}>
-                      <Button variant="contained" color="warning">
+                      <Button
+                        variant="contained"
+                        color="warning"
+                        style={{ marginTop: "20px" }}
+                      >
                         Edit
                       </Button>
                     </Link>

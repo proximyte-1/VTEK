@@ -2,58 +2,72 @@ import http from "http";
 import sql from "mssql";
 import { parse } from "url";
 import { StringDecoder } from "string_decoder";
-import axios from "axios";
 import xml2js from "xml2js";
-import { Buffer } from "buffer";
+import httpntlm from "httpntlm";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 const config = {
-  server: "applserver02.perdana.net.id",
-  user: "vincent.marcelino",
-  password: "Vincent1234", // your password
-  database: "PJPNavisionExtension",
+  server: process.env.DB_SERVER,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASS,
+  database: process.env.DB_DATABASE,
   options: {
     encrypt: false, // Set to true in production with SSL
     trustServerCertificate: true, // Only for development/testing
   },
 };
 
-const url =
-  "http://applserver02.perdana.net.id:5002/TEST/WS/PT.%20Perdana%20Jatiputra/Page/customer_list";
+const fetchNavData = (url = null, callback) => {
+  httpntlm.get(
+    {
+      url,
+      username: process.env.NAV_USER,
+      password: process.env.NAV_PASS,
+      domain: process.env.NAV_DOMAIN,
+    },
+    (err, response) => {
+      if (err) {
+        return callback({
+          status: 500,
+          error: "Failed to fetch data",
+          details: err,
+        });
+      }
 
-// Your SOAP envelope
-const soapEnvelope = `
-<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/"
-               xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-               xmlns:xsd="http://www.w3.org/2001/XMLSchema">
-  <soap:Body>
-    <ReadMultiple xmlns="urn:microsoft-dynamics-schemas/page/customer_list">
-    </ReadMultiple>
-  </soap:Body>
-</soap:Envelope>
-`;
+      xml2js.parseString(
+        response.body,
+        { explicitArray: false },
+        (err, result) => {
+          if (err) {
+            return callback({
+              status: 500,
+              error: "Failed to parse XML",
+              details: err,
+            });
+          }
 
-const fetchSOAPData = async () => {
-  axios
-    .post(url, soapEnvelope, {
-      headers: {
-        "Content-Type": "text/xml",
-        SOAPAction:
-          "urn:microsoft-dynamics-schemas/page/customer_list:ReadMultiple",
-      },
-      auth: {
-        username: "your_username", // Use full domain\username if needed
-        password: "your_password",
-      },
-    })
-    .then((res) => {
-      xml2js.parseString(res.data, { explicitArray: false }, (err, result) => {
-        if (err) return console.error("Parse error:", err);
-        console.log(JSON.stringify(result, null, 2));
-      });
-    })
-    .catch((err) => {
-      console.error("Request error:", err.message);
-    });
+          const entries = result?.feed?.entry || [];
+          const results = Array.isArray(entries)
+            ? entries.map((entry) => entry.content["m:properties"])
+            : [entries.content["m:properties"]];
+
+          return callback(null, results);
+        }
+      );
+    }
+  );
+};
+
+const navFilterEncode = (field, value) => {
+  const data = encodeURIComponent(`${field} eq '${value}'`);
+  return `?$filter=${data}`;
 };
 
 // Create server
@@ -62,6 +76,7 @@ const server = http.createServer((req, res) => {
   const parsedUrl = parse(req.url, true);
   const method = req.method;
   const path = parsedUrl.pathname.replace(/^\/+|\/+$/g, "");
+  const query = parsedUrl.query;
   const decoder = new StringDecoder("utf-8");
   let buffer = "";
 
@@ -86,40 +101,150 @@ const server = http.createServer((req, res) => {
 
     res.setHeader("Content-Type", "application/json");
 
-    if (method === "GET" && path === "api/test") {
-      const result =
-        await sql.query`SELECT TOP (1000) [NoInvoice] ,[lokasiInvoice] ,[lokasiTaxInvoice] ,[lokasiBilling] ,[lokasiCounterList] ,[tglGabungTaxInvoice] ,[statusGabungTaxInvoice] ,[jumlahGabungTaxInvoice] FROM [PJPNavisionExtension].[dbo].[PenggabunganTaxInvoice]`;
+    if (method === "GET" && path === "api/get-flk") {
+      const result = await sql.query`SELECT * FROM dbo.WebVTK`;
       res.writeHead(200, { "Content-Type": "application/json" });
       return res.end(JSON.stringify(result.recordset));
     }
 
-    if (method === "GET" && path === "api/get-flk") {
+    if (method === "GET" && path === "api/get-rep-by-cus") {
+      const id_cus = query.id_cus;
       const result =
-        await sql.query`SELECT * FROM PJPNavisionExtension.dbo.WbVtk`;
+        await sql.query`SELECT TOP 1 status_rep, rep_ke FROM dbo.WebVTK WHERE no_cus = '${id_cus}' ORDER BY id DESC`;
+      res.writeHead(200, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify(result.recordset));
+    }
+    if (method === "GET" && path === "api/get-flk-one-by-id") {
+      const id = query.id;
+      const result = await sql.query`SELECT * FROM dbo.WebVTK WHERE id = ${id}`;
       res.writeHead(200, { "Content-Type": "application/json" });
       return res.end(JSON.stringify(result.recordset));
     }
 
     if (method === "GET" && path === "api/get-no-rep") {
-      const result =
-        await sql.query`SELECT no_report FROM PJPNavisionExtension.dbo.WbVtk`;
+      const result = await sql.query`SELECT * FROM dbo.WebVTK`;
       res.writeHead(200, { "Content-Type": "application/json" });
-      fetchSOAPData();
       return res.end(JSON.stringify(result.recordset));
+      // const id = query.id;
+
+      // const navURL = process.env.NAV_WS_URL + navFilterEncode("FGINO", id);
+
+      // fetchNavData(navURL, (err, data) => {
+      //   if (err) {
+      //     res.writeHead(err.status, { "Content-Type": "application/json" });
+      //     res.end(JSON.stringify(err));
+      //     return;
+      //   }
+
+      //   res.writeHead(200, { "Content-Type": "application/json" });
+      //   res.end(JSON.stringify(data));
+      // });
+
+      // return;
+    }
+
+    if (method === "GET" && path === "api/nav-data") {
+      const id = query.id;
+      const navURL = process.env.NAV_WS_URL + navFilterEncode("FGINO", id);
+
+      fetchNavData(navURL, (err, data) => {
+        if (err) {
+          res.writeHead(err.status, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(err));
+          return;
+        }
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(data));
+      });
+
+      return;
+    }
+
+    if (method === "GET" && path === "api/nav-data-noseri") {
+      const id = query.id;
+      const navURL = process.env.NAV_WS_URL + navFilterEncode("Serial_No", id);
+
+      fetchNavData(navURL, (err, data) => {
+        if (err) {
+          res.writeHead(err.status, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(err));
+          return;
+        }
+
+        console.log(data);
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(data));
+      });
+
+      return;
+    }
+
+    if (method === "GET" && path === "api/nav") {
+      const id = query.id;
+      const navURL = process.env.NAV_WS_URL;
+
+      fetchNavData(navURL, (err, data) => {
+        if (err) {
+          res.writeHead(err.status, { "Content-Type": "application/json" });
+          res.end(JSON.stringify(err));
+          return;
+        }
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(data));
+      });
+
+      return;
     }
 
     if (method === "POST" && path === "api/create-flk") {
       try {
         const data = JSON.parse(buffer);
 
-        console.log(data);
+        // const { nama, no_report, jam_dtg } = data;
 
-        const { nama, no_report, jam_dtg } = data;
+        // const result = await sql.query`
+        // INSERT INTO PJPNavisionExtension.dbo.WbVtk (nama, no_report, jam_dtg)
+        // VALUES (${nama}, ${no_report}, ${jam_dtg})
+        // `;
+
+        const {
+          no_rep,
+          no_cus,
+          no_call,
+          pelapor,
+          waktu_call,
+          waktu_dtg,
+          status_call,
+          keluhan,
+          kat_keluhan,
+          problem,
+          kat_problem,
+          solusi,
+          waktu_mulai,
+          waktu_selesai,
+          count_bw,
+          count_cl,
+          saran,
+          status_res,
+          rep_ke,
+        } = data;
 
         const result = await sql.query`
-          INSERT INTO PJPNavisionExtension.dbo.WbVtk (nama, no_report, jam_dtg)
-          VALUES (${nama}, ${no_report}, ${jam_dtg})
-        `;
+                  INSERT INTO [dbo].[WebVTK] (
+            no_rep, no_cus, no_call, pelapor, waktu_call, waktu_dtg, status_call,
+            keluhan, kat_keluhan, problem, kat_problem, solusi, waktu_mulai,
+            waktu_selesai, count_bw, count_cl, saran, status_res, rep_ke
+        )
+        VALUES (
+            ${no_rep}, ${no_cus}, ${no_call}, ${pelapor}, ${waktu_call}, ${waktu_dtg}, ${status_call},
+            ${keluhan}, ${kat_keluhan}, ${problem}, ${kat_problem}, ${solusi}, ${waktu_mulai},
+            ${waktu_selesai}, ${count_bw}, ${count_cl}, ${saran}, ${status_res}, ${rep_ke}
+        );
+
+                `;
 
         res.writeHead(200);
         return res.end(
@@ -144,12 +269,90 @@ const server = http.createServer((req, res) => {
       }
     }
 
+    if (method === "POST" && path === "api/edit-flk") {
+      const id = query.id;
+      try {
+        const data = JSON.parse(buffer);
+
+        console.log(data);
+
+        const {
+          no_rep,
+          no_cus,
+          no_call,
+          pelapor,
+          waktu_call,
+          waktu_dtg,
+          status_call,
+          keluhan,
+          kat_keluhan,
+          problem,
+          kat_problem,
+          solusi,
+          waktu_mulai,
+          waktu_selesai,
+          count_bw,
+          count_cl,
+          saran,
+          status_res,
+          rep_ke,
+        } = data;
+
+        const result = await sql.query`
+            UPDATE [dbo].[WebVTK]
+            SET 
+                no_rep = ${no_rep},
+                no_cus = ${no_cus},
+                no_call = ${no_call},
+                pelapor = ${pelapor},
+                waktu_call = ${waktu_call},
+                waktu_dtg = ${waktu_dtg},
+                status_call = ${status_call},
+                keluhan = ${keluhan},
+                kat_keluhan = ${kat_keluhan},
+                problem = ${problem},
+                kat_problem = ${kat_problem},
+                solusi = ${solusi},
+                waktu_mulai = ${waktu_mulai},
+                waktu_selesai = ${waktu_selesai},
+                count_bw = ${count_bw},
+                count_cl = ${count_cl},
+                saran = ${saran},
+                status_res = ${status_res},
+                rep_ke = ${rep_ke}
+            WHERE id = ${id}
+        `;
+
+        res.writeHead(200);
+        return res.end(
+          JSON.stringify({
+            ok: true,
+            status: 1,
+            data: result.recordset,
+            message: "Data updated successfully",
+          })
+        );
+      } catch (err) {
+        console.error(err);
+        res.writeHead(500);
+        return res.end(
+          JSON.stringify({
+            ok: false,
+            status: 0,
+            data: "",
+            message: "Update failed",
+          })
+        );
+      }
+    }
+
     // Fallback: Not found
     res.writeHead(404);
     res.end(JSON.stringify({ message: "Not found" }));
   });
 });
 
-server.listen(3001, () => {
-  console.log("Server running on http://localhost:3001");
+server.listen(process.env.PORT, () => {
+  const text = "Server running on http://localhost:" + String(process.env.PORT);
+  console.log(text);
 });
