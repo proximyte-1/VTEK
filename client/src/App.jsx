@@ -5,7 +5,11 @@ import Home from "./pages/Home";
 import Master from "./pages/Master";
 import Add from "./pages/Add";
 import Edit from "./pages/Edit";
-import NoSeri from "./pages/NoSeri";
+import AddNoSeri from "./pages/AddNoSeri";
+import EditNoSeri from "./pages/EditNoSeri_new";
+import FLKNoSeri from "./pages/FLKNoSeri";
+import FLKNoRep from "./pages/FLKNoRep";
+import Report from "./pages/Report";
 
 function App() {
   return (
@@ -13,10 +17,28 @@ function App() {
       <Routes>
         <Route path="/" element={<Layout />}>
           <Route index element={<Home />} />
-          <Route path="add" element={<Add />} />
-          <Route path="add-no-barang" element={<NoSeri />} />
-          <Route path="edit/:id" element={<Edit />} />
-          <Route path="master" element={<Master />} />
+          {/* FLK Group */}
+          <Route path="flk">
+            <Route index element={<FLKNoRep />} />
+            <Route path="add" element={<Add />} />
+            <Route path="edit/:id" element={<Edit />} />
+          </Route>
+
+          {/* FLK No Barang Group */}
+          <Route path="flk-no-barang">
+            <Route index element={<FLKNoSeri />} />
+            <Route path="add" element={<AddNoSeri />} />
+            <Route path="edit/:id" element={<EditNoSeri />} />
+          </Route>
+
+          {/* Admin Group */}
+          {/* <Route path="admin" element={<Layout />}>
+            <Route index element={<Admin />} />
+            <Route path="user" element={<AdminUser />} />
+            <Route path="settings" element={<AdminSettings />} />
+          </Route> */}
+
+          <Route path="report" element={<Report />} />
         </Route>
       </Routes>
     </Router>

@@ -20,18 +20,25 @@ import {
 import dayjs from "dayjs";
 import { DataGrid } from "@mui/x-data-grid";
 
-const Home = () => {
+const FLKNoRep = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
   const columns = [
     {
+      field: "no",
+      headerName: "No.",
+      sortable: false,
+      renderCell: (params) => {
+        return params.api.getAllRowIds().indexOf(params.id) + 1;
+      },
+    },
+    {
       field: "no_rep",
       headerName: "No Report",
       flex: 1,
       width: 100,
-      renderCell: (params) =>
-        params.row.type === 1 ? `SPGFGI${params.value}` : `- No.Seri -`,
+      renderCell: (params) => `SPGFGI${params.value}`,
     },
     { field: "pelapor", headerName: "Nama Pelapor", flex: 1 },
     {
@@ -55,28 +62,17 @@ const Home = () => {
       filterable: false,
       flex: 1,
       align: "center",
-      renderCell: (params) =>
-        params.row.type === 1 ? (
-          <>
-            <Button
-              variant="contained"
-              color="warning"
-              onClick={() => navigate(`/edit/id=${params.row.id}`)}
-            >
-              Edit
-            </Button>
-          </>
-        ) : (
-          <>
-            <Button
-              variant="contained"
-              color="warning"
-              onClick={() => navigate(`/edit-no-barang/id=${params.row.id}`)}
-            >
-              Edit
-            </Button>
-          </>
-        ),
+      renderCell: (params) => (
+        <>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={() => navigate(`edit/id=${params.row.id}`)}
+          >
+            Edit
+          </Button>
+        </>
+      ),
     },
   ];
 
@@ -88,7 +84,7 @@ const Home = () => {
     async function fetchDataFLK() {
       try {
         const response = await fetch(
-          import.meta.env.VITE_API_URL + `api/get-flk`
+          import.meta.env.VITE_API_URL + `api/get-flk-norep`
         );
 
         const data = await response.json();
@@ -116,7 +112,7 @@ const Home = () => {
   return (
     <Container>
       <Typography variant="h4" gutterBottom>
-        Home
+        Laporan Kerja - Dengan Barang
       </Typography>
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Box sx={{ minWidth: 700 }}>
@@ -139,15 +135,14 @@ const Home = () => {
       </Box>
 
       {/* Link to Form Page */}
-      <Link to="/add">
-        <Button
-          variant="contained"
-          color="primary"
-          style={{ marginTop: "20px" }}
-        >
-          New Data
-        </Button>
-      </Link>
+      <Button
+        variant="contained"
+        color="primary"
+        style={{ marginTop: "20px" }}
+        onClick={() => navigate(`add`)}
+      >
+        New Data
+      </Button>
 
       <Snackbar
         open={open}
@@ -167,4 +162,4 @@ const Home = () => {
   );
 };
 
-export default Home;
+export default FLKNoRep;

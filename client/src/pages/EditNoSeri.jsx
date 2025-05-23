@@ -28,17 +28,20 @@ import {
 } from "@mui/material";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
-import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { ExpandMoreRounded } from "@mui/icons-material";
-import dayjs from "dayjs";
 import { useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import dayjs from "dayjs";
+import NumberFormatTextField from "../components/NumberFormatTextField/NumberFormatTextField";
 
-const NoSeri = () => {
+const EditNoSeri = () => {
+  const { id } = useParams();
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
-    no_rep: "",
     no_seri: "",
+    type: "",
     no_cus: "",
     no_call: "",
     pelapor: "",
@@ -90,17 +93,22 @@ const NoSeri = () => {
     SS: "Software Support",
   };
 
-  const [barang, setDataBarang] = useState([]);
   const [customer, setDataCustomer] = useState([]);
-  const [searched, setSearched] = useState(false);
+  const [searched, setSearched] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [data_no_seri, setDataNoSeri] = useState([]);
   const [statusRes, setStatusRes] = useState([]);
   const [alert, setAlert] = useState({
     open: false,
     message: "",
     severity: "success", // 'success', 'error', 'warning', 'info'
   });
+
+  const displayValue = (data) => {
+    if (typeof data === "string") return data.trim();
+    if (typeof data === "object" && "_" in data) return String(data._).trim();
+    if (data === null || data === undefined || data == "") return "-";
+    return "-";
+  };
 
   const showAlert = (message, severity) => {
     setAlert({
@@ -114,21 +122,67 @@ const NoSeri = () => {
     setAlert((prev) => ({ ...prev, open: false }));
   };
 
-  // useEffect(() => {
-  //   async function fetchNoSeri() {
-  //     try {
-  //       const response = await fetch(
-  //         import.meta.env.VITE_API_URL + `api/get-no-rep`
-  //       );
-  //       const data = await response.json();
-  //       setDataNoRep(data);
-  //     } catch (error) {
-  //       console.error("Error fetching No Seri:", error);
-  //     }
-  //   }
+  useEffect(() => {
+    fetch(import.meta.env.VITE_API_URL + `api/get-flk-one-by-id?${id}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const datas = data[0];
+        if (datas && datas.no_seri) {
+          setFormData(() => ({
+            ...formData,
+            ...datas,
+            waktu_call: datas.waktu_call ? dayjs(datas.waktu_call) : null,
+            waktu_dtg: datas.waktu_dtg ? dayjs(datas.waktu_dtg) : null,
+            waktu_mulai: datas.waktu_mulai ? dayjs(datas.waktu_mulai) : null,
+            waktu_selesai: datas.waktu_selesai
+              ? dayjs(datas.waktu_selesai)
+              : null,
+          }));
 
-  //   fetchNoSeri();
-  // }, []);
+          //fetch data customer
+          fetchDataCustomer(datas.no_seri);
+        } else {
+          console.error("No data found or no_seri is missing");
+        }
+      })
+      .catch((err) => console.error("Fetch failed", err));
+  }, [id]);
+
+  const fetchDataCustomer = async (id) => {
+    try {
+      const fetch_customer = await fetch(
+        `http://localhost:3001/api/nav-data-noseri?id=${id}`
+      );
+      const data = await fetch_customer.json();
+
+      if (!data.length <= 0) {
+        setDataCustomer(data[0]);
+      }
+    } catch (error) {
+      console.error("Error fetching customer:", error);
+    }
+  };
+
+  const fetchContRes = async (id_cus, value, id) => {
+    const response = await fetch(
+      import.meta.env.VITE_API_URL +
+        `api/get-rep-by-cus?id_cus=${id_cus}&field=no_seri&value=${value}&id=${id}`
+    );
+    const data = await response.json();
+
+    const incre = data[0]["rep_ke"] + 1;
+
+    if (data.length <= 0) {
+      return;
+    }
+
+    if (data[0]["status_res"] === "CONT") {
+      setFormData({
+        ...formData,
+        rep_ke: incre,
+      });
+    }
+  };
 
   const handleChange = (e) => {
     setFormData({
@@ -141,43 +195,6 @@ const NoSeri = () => {
     }
   };
 
-  async function fetchDataBarang(id) {
-    try {
-      const fetch_barang = await fetch(
-        import.meta.env.VITE_API_URL + `api/nav-data-noseri?id=${id}`
-      );
-      const data = await fetch_barang.json();
-
-      if (data.length <= 0) {
-        showAlert("Nomor Seri Belum Ada Pada Navision !", "error");
-        setSearched(false);
-      } else {
-        showAlert("Nomor Seri Tersedia", "success");
-        setSearched(true);
-        setDataBarang(data);
-        setDataCustomer(data[0]);
-        // setReportKe(data[0]["d:Sell_to_Customer_No"]);
-      }
-    } catch (error) {
-      console.error("Error fetching barang:", error);
-    }
-  }
-
-  const setReportKe = async (id_cus) => {
-    const response = await fetch(
-      `http://localhost:3001/api/get-rep-by-cus?id_cus=${id_cus}`
-    );
-    const data = await response.json();
-
-    if (data[0]["status_rep"] === "CONT") {
-      // const res = formData.rep_ke = data[0]["rep_ke"] + 1;
-      setFormData({
-        ...formData,
-        [rep_ke]: (data[0]["rep_ke"] || 0) + 1,
-      });
-    }
-  };
-
   const handleSearch = () => {
     setLoading(true);
 
@@ -185,14 +202,8 @@ const NoSeri = () => {
       showAlert("Nomor Seri Tidak Diperbolehkan Kosong.", "error");
       setSearched(false);
       setLoading(false);
-    }
-    // else if (data_no_seri.some((item) => item.no_seri === formData.no_seri)) {
-    //   showAlert("Nomor Seri Sudah Pernah Dipakai.", "error");
-    //   setSearched(false);
-    //   setLoading(false);
-    // }
-    else {
-      fetchDataBarang(formData.no_seri);
+    } else {
+      fetchDataCustomer(formData.no_seri);
       setLoading(false);
     }
   };
@@ -221,15 +232,15 @@ const NoSeri = () => {
         const call = dayjs(formData.waktu_call);
         const dtg = dayjs(newDate);
 
-        if (call.isBefore(dtg)) {
+        if (dtg.isBefore(call)) {
           showAlert(
-            "Waktu call tidak boleh lebih awal dari waktu datang.",
+            "Waktu penjadwalan tidak boleh lebih awal dari waktu call.",
             "error"
           );
           return;
         }
       }
-      console.log("selesai");
+
       setFormData({
         ...formData,
         [field]: newDate,
@@ -237,16 +248,12 @@ const NoSeri = () => {
     }
   };
 
-  function displayValue(value) {
-    return value === null || value === undefined || value == "" ? "-" : value;
-  }
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
     try {
       const response = await fetch(
-        import.meta.env.VITE_API_URL + `api/create-flk`,
+        import.meta.env.VITE_API_URL + `api/edit-flk?${id}`,
         {
           method: "POST",
           headers: {
@@ -262,14 +269,13 @@ const NoSeri = () => {
           }),
         }
       );
-
       const result = await response.json();
 
       if (response.ok) {
         // Redirect to homepage after successful submission
-        navigate("/", {
+        navigate("/flk-no-barang", {
           state: {
-            message: "Data Form Laporan Kerja Berhasil Ditambahkan!",
+            message: "Data Form Laporan Kerja Berhasil Diubah!",
             severity: "success",
           },
         });
@@ -289,9 +295,9 @@ const NoSeri = () => {
   return (
     <Paper sx={{ padding: 3 }} elevation={4}>
       <Typography variant="h5" marginBottom={"1.5em"} gutterBottom>
-        New Form Laporan Kerja -- Tanpa Barang
+        Edit Form Laporan Kerja
       </Typography>
-      <LocalizationProvider dateAdapter={AdapterDateFns}>
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
         <form onSubmit={handleSubmit}>
           <Grid container spacing={5} marginY={"2em"} alignItems="center">
             {/* Input Report */}
@@ -320,7 +326,10 @@ const NoSeri = () => {
             <Grid container spacing={5}>
               {/* Accordion 1 - Non Input */}
               <Grid size={12}>
-                <Accordion disabled={!searched || !formData.no_rep}>
+                <Accordion
+                  disabled={!searched || !formData.no_seri}
+                  defaultExpanded
+                >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
                     aria-controls="panel1-content"
@@ -336,33 +345,23 @@ const NoSeri = () => {
                       <Grid size={{ xs: 12, md: 6 }}>
                         <Typography>
                           No. Pelanggan :{" "}
-                          {displayValue(
-                            customer?.["d:Sell_to_Customer_No"]?.trim() || "-"
-                          )}
+                          {displayValue(customer?.["d:Sell_to_Customer_No"])}
                         </Typography>
                         <Typography>
                           Nama Pelanggan :{" "}
-                          {displayValue(
-                            customer?.["d:Sell_to_Customer_Name"]?.trim() || "-"
-                          )}
+                          {displayValue(customer?.["d:Sell_to_Customer_Name"])}
                         </Typography>
                         <Typography>
                           Alias :{" "}
-                          {displayValue(
-                            customer?.["d:Sell_to_Customer_Name"]?.trim() || "-"
-                          )}
+                          {displayValue(customer?.["d:Sell_to_Customer_Name"])}
                         </Typography>
                         <Typography>
                           Alamat :{" "}
-                          {displayValue(
-                            customer?.["d:Sell_to_Address"]?.trim() || "-"
-                          )}
+                          {displayValue(customer?.["d:Sell_to_Address"])}
                         </Typography>
                         <Typography>
                           Penanggung Jawab :{" "}
-                          {displayValue(
-                            customer?.["d:Penanggung_jawab"]?.trim() || "-"
-                          )}
+                          {displayValue(customer?.["d:Penanggung_jawab"])}
                         </Typography>
                       </Grid>
                       <Grid size={{ xs: 12, md: 6 }}>
@@ -382,7 +381,10 @@ const NoSeri = () => {
 
               {/* Accordion 2 - Non Input */}
               <Grid size={12}>
-                <Accordion disabled={!searched || !formData.no_rep}>
+                <Accordion
+                  disabled={!searched || !formData.no_seri}
+                  defaultExpanded
+                >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
                     aria-controls="panel1-content"
@@ -395,28 +397,20 @@ const NoSeri = () => {
                   <AccordionDetails>
                     <Grid container spacing={5}>
                       <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                        <Typography>Kode Mesin :</Typography>
                         <Typography>
-                          Kode Mesin :{" "}
-                          {displayValue(
-                            customer?.["d:Machine_Code"]?.trim() || "-"
-                          )}
-                        </Typography>
-                        <Typography>
-                          Seri :{" "}
-                          {displayValue(
-                            customer?.["d:Serial_No"]?.trim() || "-"
-                          )}
+                          Seri : {displayValue(customer?.["d:Serial_No"])}
                         </Typography>
                         <Typography>
                           Nama Mesin :{" "}
-                          {displayValue(
-                            customer?.["d:Machine_Name"]?.trim() || "-"
-                          )}
+                          {displayValue(customer?.["d:Machine_Name"])}
                         </Typography>
                       </Grid>
 
                       <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-                        <Typography>Type :</Typography>
+                        <Typography>
+                          Type : {displayValue(customer?.["d:Machine_Code"])}
+                        </Typography>
                         <Typography>Tanggal Instalasi :</Typography>
                         <Typography>Tanggal Kontrak :</Typography>
                       </Grid>
@@ -433,7 +427,7 @@ const NoSeri = () => {
 
               {/* Accordion 3 */}
               <Grid size={12}>
-                <Accordion disabled={!searched || !formData.no_rep}>
+                <Accordion disabled={!searched || !formData.no_seri}>
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
                     aria-controls="panel1-content"
@@ -499,7 +493,9 @@ const NoSeri = () => {
                         />
                       </Grid>
                       <Grid size={{ xs: 12, md: 6 }}>
-                        <InputLabel id="waktu_dtg">Waktu Datang</InputLabel>
+                        <InputLabel id="waktu_dtg">
+                          Waktu Penjadwalan
+                        </InputLabel>
                         <DateTimePicker
                           labelId="waktu_dtg"
                           value={formData.waktu_dtg}
@@ -587,7 +583,7 @@ const NoSeri = () => {
 
               {/* Accordion 4 */}
               <Grid size={12}>
-                <Accordion disabled={!searched || !formData.no_rep}>
+                <Accordion disabled={!searched || !formData.no_seri}>
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
                     aria-controls="panel1-content"
@@ -693,13 +689,12 @@ const NoSeri = () => {
                         >
                           Counter B/W
                         </Typography>
-                        <TextField
-                          variant="outlined"
-                          fullWidth
-                          value={formData.count_bw}
+                        <NumberFormatTextField
+                          label=""
                           name="count_bw"
-                          type="number"
+                          value={formData.count_bw}
                           onChange={handleChange}
+                          fullWidth
                         />
                       </Grid>
 
@@ -710,13 +705,12 @@ const NoSeri = () => {
                         >
                           Counter CL
                         </Typography>
-                        <TextField
-                          variant="outlined"
-                          fullWidth
-                          value={formData.count_cl}
+                        <NumberFormatTextField
+                          label=""
                           name="count_cl"
-                          type="number"
+                          value={formData.count_cl}
                           onChange={handleChange}
+                          fullWidth
                         />
                       </Grid>
 
@@ -783,60 +777,6 @@ const NoSeri = () => {
                   </AccordionDetails>
                 </Accordion>
               </Grid>
-
-              {/* Accordion 5 - Table */}
-              <Grid size={12}>
-                <Accordion disabled={!searched || !formData.no_rep}>
-                  <AccordionSummary
-                    expandIcon={<ExpandMoreRounded />}
-                    aria-controls="panel1-content"
-                    id="panel1-header"
-                  >
-                    <Typography component="span" variant="h5">
-                      Detail Barang
-                    </Typography>
-                  </AccordionSummary>
-                  <AccordionDetails>
-                    {/* Table */}
-                    <TableContainer sx={{ padding: 3 }} component={Paper}>
-                      <Table>
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>No.</TableCell>
-                            <TableCell>Kode Part</TableCell>
-                            <TableCell>Nama Part/ Cosumable</TableCell>
-                            <TableCell>Quantity</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {barang.length > 0 ? (
-                            barang.map((item, index) => (
-                              <TableRow key={index}>
-                                <TableCell>{index + 1}</TableCell>
-                                <TableCell>
-                                  {displayValue(item["d:ItemNo"])}
-                                </TableCell>
-                                <TableCell>
-                                  {displayValue(item["d:Description"])}
-                                </TableCell>
-                                <TableCell>
-                                  {displayValue(item["d:Quantity"]["_"])}
-                                </TableCell>
-                              </TableRow>
-                            ))
-                          ) : (
-                            <TableRow>
-                              <TableCell colSpan={5} align="center">
-                                No data found.
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  </AccordionDetails>
-                </Accordion>
-              </Grid>
             </Grid>
           </Grid>
 
@@ -865,7 +805,7 @@ const NoSeri = () => {
                 type="submit"
                 variant="contained"
                 color="primary"
-                disabled={!searched || !formData.no_rep}
+                disabled={!searched || !formData.no_seri}
                 sx={{ width: isSmallScreen ? "100%" : "auto" }}
               >
                 Submit
@@ -878,4 +818,4 @@ const NoSeri = () => {
   );
 };
 
-export default NoSeri;
+export default EditNoSeri;

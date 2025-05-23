@@ -20,7 +20,7 @@ import {
 import dayjs from "dayjs";
 import { DataGrid } from "@mui/x-data-grid";
 
-const Home = () => {
+const User = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -167,4 +167,4 @@ const Home = () => {
   );
 };
 
-export default Home;
+export default User;

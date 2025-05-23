@@ -1,0 +1,80 @@
+USE [PJPNavisionExtension]
+GO
+
+/****** Object:  Table [dbo].[WebVTK]    Script Date: 23/05/2025 17.10.03 ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[WebVTK](
+	[id] [bigint] IDENTITY(1,1) NOT NULL,
+	[no_rep] [varchar](15) NULL,
+	[no_seri] [varchar](15) NULL,
+	[no_lap] [varchar](15) NULL,
+	[type] [int] NOT NULL,
+	[no_cus] [varchar](15) NULL,
+	[no_call] [varchar](15) NULL,
+	[pelapor] [varchar](100) NULL,
+	[waktu_call] [datetime] NULL,
+	[waktu_dtg] [datetime] NULL,
+	[status_call] [varchar](10) NULL,
+	[keluhan] [varchar](255) NULL,
+	[kat_keluhan] [varchar](10) NULL,
+	[problem] [varchar](255) NULL,
+	[kat_problem] [varchar](10) NULL,
+	[solusi] [varchar](255) NULL,
+	[waktu_mulai] [datetime] NULL,
+	[waktu_selesai] [datetime] NULL,
+	[count_bw] [bigint] NULL,
+	[count_cl] [bigint] NULL,
+	[saran] [varchar](255) NULL,
+	[status_res] [varchar](10) NULL,
+	[rep_ke] [int] NULL,
+	[pic] [varchar](255) NULL,
+	[created_by] [bigint] NOT NULL,
+	[created_at] [datetime] NOT NULL,
+	[deleted_at] [datetime] NULL,
+ CONSTRAINT [PK_WebVTK] PRIMARY KEY CLUSTERED 
+(
+	[id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[WebVTK] ADD  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+
+
+---------- Barang ---------------
+USE [PJPNavisionExtension]
+GO
+
+/****** Object:  Table [dbo].[VTK_Barang]    Script Date: 23/05/2025 17.11.06 ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[VTK_Barang](
+	[id_brg] [bigint] IDENTITY(1,1) NOT NULL,
+	[no_seri] [varchar](15) NOT NULL,
+	[no_brg] [varchar](15) NOT NULL,
+	[nama_brg] [varchar](255) NULL,
+	[qty] [int] NULL,
+	[created_at] [datetime] NOT NULL,
+ CONSTRAINT [PK_VTK_Barang] PRIMARY KEY CLUSTERED 
+(
+	[id_brg] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[VTK_Barang] ADD  CONSTRAINT [DF_VTK_Barang_created_at]  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+
+
+
+

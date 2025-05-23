@@ -25,6 +25,7 @@ import {
   Link,
   CircularProgress,
   InputAdornment,
+  Box,
 } from "@mui/material";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
@@ -33,6 +34,8 @@ import { ExpandMoreRounded } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import { useParams } from "react-router-dom";
 import dayjs from "dayjs";
+import { DataGrid } from "@mui/x-data-grid";
+import NumberFormatTextField from "../components/NumberFormatTextField/NumberFormatTextField";
 
 const Edit = () => {
   const { id } = useParams();
@@ -91,6 +94,35 @@ const Edit = () => {
     SS: "Software Support",
   };
 
+  const columns = [
+    {
+      field: "no",
+      headerName: "No.",
+      sortable: false,
+      renderCell: (params) => {
+        return params.api.getAllRowIds().indexOf(params.id) + 1;
+      },
+    },
+    {
+      field: "kode_part",
+      headerName: "Kode Part",
+      flex: 1,
+      renderCell: ({ row }) => <div>{row["d:ItemNo"]}</div>,
+    },
+    {
+      field: "nama_part",
+      headerName: "Nama Part",
+      flex: 1,
+      renderCell: ({ row }) => <div>{row["d:Description"]}</div>,
+    },
+    {
+      field: "quantity",
+      headerName: "Quantity",
+      flex: 1,
+      renderCell: ({ row }) => <div>{row["d:Quantity"]?._}</div>,
+    },
+  ];
+
   const [barang, setDataBarang] = useState([]);
   const [customer, setDataCustomer] = useState([]);
   const [searched, setSearched] = useState(true);
@@ -103,8 +135,11 @@ const Edit = () => {
     severity: "success", // 'success', 'error', 'warning', 'info'
   });
 
-  const displayValue = (value) => {
-    return value === null || value === undefined || value == "" ? "-" : value;
+  const displayValue = (data) => {
+    if (typeof data === "string") return data.trim();
+    if (typeof data === "object" && "_" in data) return String(data._).trim();
+    if (data === null || data === undefined || data == "") return "-";
+    return "-";
   };
 
   const showAlert = (message, severity) => {
@@ -253,9 +288,9 @@ const Edit = () => {
         const call = dayjs(formData.waktu_call);
         const dtg = dayjs(newDate);
 
-        if (call.isBefore(dtg)) {
+        if (dtg.isBefore(call)) {
           showAlert(
-            "Waktu call tidak boleh lebih awal dari waktu datang.",
+            "Waktu penjadwalan tidak boleh lebih awal dari waktu call.",
             "error"
           );
           return;
@@ -294,7 +329,7 @@ const Edit = () => {
 
       if (response.ok) {
         // Redirect to homepage after successful submission
-        navigate("/", {
+        navigate("/flk", {
           state: {
             message: "Data Form Laporan Kerja Berhasil Diubah!",
             severity: "success",
@@ -329,7 +364,7 @@ const Edit = () => {
                 fullWidth
                 value={formData.no_rep}
                 name="no_rep"
-                // type="number"
+                type="number"
                 onChange={handleChange}
                 slotProps={{
                   input: {
@@ -355,7 +390,10 @@ const Edit = () => {
             <Grid container spacing={5}>
               {/* Accordion 1 - Non Input */}
               <Grid size={12}>
-                <Accordion disabled={!searched || !formData.no_rep}>
+                <Accordion
+                  disabled={!searched || !formData.no_rep}
+                  defaultExpanded
+                >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
                     aria-controls="panel1-content"
@@ -371,33 +409,23 @@ const Edit = () => {
                       <Grid size={{ xs: 12, md: 6 }}>
                         <Typography>
                           No. Pelanggan :{" "}
-                          {displayValue(
-                            customer?.["d:Sell_to_Customer_No"]?.trim() || "-"
-                          )}
+                          {displayValue(customer?.["d:Sell_to_Customer_No"])}
                         </Typography>
                         <Typography>
                           Nama Pelanggan :{" "}
-                          {displayValue(
-                            customer?.["d:Sell_to_Customer_Name"]?.trim() || "-"
-                          )}
+                          {displayValue(customer?.["d:Sell_to_Customer_Name"])}
                         </Typography>
                         <Typography>
                           Alias :{" "}
-                          {displayValue(
-                            customer?.["d:Sell_to_Customer_Name"]?.trim() || "-"
-                          )}
+                          {displayValue(customer?.["d:Sell_to_Customer_Name"])}
                         </Typography>
                         <Typography>
                           Alamat :{" "}
-                          {displayValue(
-                            customer?.["d:Sell_to_Address"]?.trim() || "-"
-                          )}
+                          {displayValue(customer?.["d:Sell_to_Address"])}
                         </Typography>
                         <Typography>
                           Penanggung Jawab :{" "}
-                          {displayValue(
-                            customer?.["d:Penanggung_jawab"]?.trim() || "-"
-                          )}
+                          {displayValue(customer?.["d:Penanggung_jawab"])}
                         </Typography>
                       </Grid>
                       <Grid size={{ xs: 12, md: 6 }}>
@@ -417,7 +445,10 @@ const Edit = () => {
 
               {/* Accordion 2 - Non Input */}
               <Grid size={12}>
-                <Accordion disabled={!searched || !formData.no_rep}>
+                <Accordion
+                  disabled={!searched || !formData.no_rep}
+                  defaultExpanded
+                >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
                     aria-controls="panel1-content"
@@ -430,28 +461,20 @@ const Edit = () => {
                   <AccordionDetails>
                     <Grid container spacing={5}>
                       <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                        <Typography>Kode Mesin :</Typography>
                         <Typography>
-                          Kode Mesin :{" "}
-                          {displayValue(
-                            customer?.["d:Machine_Code"]?.trim() || "-"
-                          )}
-                        </Typography>
-                        <Typography>
-                          Seri :{" "}
-                          {displayValue(
-                            customer?.["d:Serial_No"]?.trim() || "-"
-                          )}
+                          Seri : {displayValue(customer?.["d:Serial_No"])}
                         </Typography>
                         <Typography>
                           Nama Mesin :{" "}
-                          {displayValue(
-                            customer?.["d:Machine_Name"]?.trim() || "-"
-                          )}
+                          {displayValue(customer?.["d:Machine_Name"])}
                         </Typography>
                       </Grid>
 
                       <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-                        <Typography>Type :</Typography>
+                        <Typography>
+                          Type : {displayValue(customer?.["d:Machine_Code"])}
+                        </Typography>
                         <Typography>Tanggal Instalasi :</Typography>
                         <Typography>Tanggal Kontrak :</Typography>
                       </Grid>
@@ -534,7 +557,9 @@ const Edit = () => {
                         />
                       </Grid>
                       <Grid size={{ xs: 12, md: 6 }}>
-                        <InputLabel id="waktu_dtg">Waktu Datang</InputLabel>
+                        <InputLabel id="waktu_dtg">
+                          Waktu Penjadwalan
+                        </InputLabel>
                         <DateTimePicker
                           labelId="waktu_dtg"
                           value={formData.waktu_dtg}
@@ -728,13 +753,12 @@ const Edit = () => {
                         >
                           Counter B/W
                         </Typography>
-                        <TextField
-                          variant="outlined"
-                          fullWidth
-                          value={formData.count_bw}
+                        <NumberFormatTextField
+                          label=""
                           name="count_bw"
-                          type="number"
+                          value={formData.count_bw}
                           onChange={handleChange}
+                          fullWidth
                         />
                       </Grid>
 
@@ -745,13 +769,12 @@ const Edit = () => {
                         >
                           Counter CL
                         </Typography>
-                        <TextField
-                          variant="outlined"
-                          fullWidth
-                          value={formData.count_cl}
+                        <NumberFormatTextField
+                          label=""
                           name="count_cl"
-                          type="number"
+                          value={formData.count_cl}
                           onChange={handleChange}
+                          fullWidth
                         />
                       </Grid>
 
@@ -832,43 +855,24 @@ const Edit = () => {
                     </Typography>
                   </AccordionSummary>
                   <AccordionDetails>
-                    {/* Table */}
-                    <TableContainer sx={{ padding: 3 }} component={Paper}>
-                      <Table>
-                        <TableHead>
-                          <TableRow>
-                            <TableCell>No.</TableCell>
-                            <TableCell>Kode Part</TableCell>
-                            <TableCell>Nama Part/ Cosumable</TableCell>
-                            <TableCell>Quantity</TableCell>
-                          </TableRow>
-                        </TableHead>
-                        <TableBody>
-                          {barang.length > 0 ? (
-                            barang.map((item, index) => (
-                              <TableRow key={index}>
-                                <TableCell>{index + 1}</TableCell>
-                                <TableCell>
-                                  {displayValue(item["d:ItemNo"])}
-                                </TableCell>
-                                <TableCell>
-                                  {displayValue(item["d:Description"])}
-                                </TableCell>
-                                <TableCell>
-                                  {displayValue(item["d:Quantity"]["_"])}
-                                </TableCell>
-                              </TableRow>
-                            ))
-                          ) : (
-                            <TableRow>
-                              <TableCell colSpan={5} align="center">
-                                No data found.
-                              </TableCell>
-                            </TableRow>
-                          )}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
+                    <Box sx={{ width: "100%", overflowX: "auto" }}>
+                      <Box sx={{ minWidth: 700 }}>
+                        <DataGrid
+                          rows={barang}
+                          columns={columns}
+                          getRowId={(row) => row["d:ItemNo"]}
+                          initialState={{
+                            pagination: {
+                              paginationModel: {
+                                pageSize: 5,
+                              },
+                            },
+                          }}
+                          pageSizeOptions={[5]}
+                          disableRowSelectionOnClick
+                        />
+                      </Box>
+                    </Box>
                   </AccordionDetails>
                 </Accordion>
               </Grid>

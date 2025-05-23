@@ -25,26 +25,23 @@ import {
   Link,
   CircularProgress,
   InputAdornment,
-  Box,
 } from "@mui/material";
-import { styled } from "@mui/material/styles";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
-import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { ExpandMoreRounded } from "@mui/icons-material";
-import dayjs from "dayjs";
 import { useNavigate } from "react-router-dom";
-import { DataGrid } from "@mui/x-data-grid";
+import { useParams } from "react-router-dom";
+import dayjs from "dayjs";
 import NumberFormatTextField from "../components/NumberFormatTextField/NumberFormatTextField";
-import FileUpload from "../components/FileUpload/FileUpload";
 
-const Add = () => {
+const EditNoSeri = () => {
+  const { id } = useParams();
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
-    no_rep: "",
     no_seri: "",
-    no_lap: "",
+    type: "",
     no_cus: "",
     no_call: "",
     pelapor: "",
@@ -61,7 +58,6 @@ const Add = () => {
     count_bw: "",
     count_cl: "",
     saran: "",
-    pic: null,
     status_res: "",
     rep_ke: 0,
   });
@@ -97,52 +93,9 @@ const Add = () => {
     SS: "Software Support",
   };
 
-  const VisuallyHiddenInput = styled("input")({
-    clip: "rect(0 0 0 0)",
-    clipPath: "inset(50%)",
-    height: 1,
-    overflow: "hidden",
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    whiteSpace: "nowrap",
-    width: 1,
-  });
-
-  const columns = [
-    {
-      field: "no",
-      headerName: "No.",
-      sortable: false,
-      renderCell: (params) => {
-        return params.api.getAllRowIds().indexOf(params.id) + 1;
-      },
-    },
-    {
-      field: "kode_part",
-      headerName: "Kode Part",
-      flex: 1,
-      renderCell: ({ row }) => <div>{row["d:ItemNo"]}</div>,
-    },
-    {
-      field: "nama_part",
-      headerName: "Nama Part",
-      flex: 1,
-      renderCell: ({ row }) => <div>{row["d:Description"]}</div>,
-    },
-    {
-      field: "quantity",
-      headerName: "Quantity",
-      flex: 1,
-      renderCell: ({ row }) => <div>{row["d:Quantity"]?._}</div>,
-    },
-  ];
-
-  const [barang, setDataBarang] = useState([]);
   const [customer, setDataCustomer] = useState([]);
-  const [searched, setSearched] = useState(false);
+  const [searched, setSearched] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [data_no_rep, setDataNoRep] = useState([]);
   const [statusRes, setStatusRes] = useState([]);
   const [alert, setAlert] = useState({
     open: false,
@@ -150,21 +103,12 @@ const Add = () => {
     severity: "success", // 'success', 'error', 'warning', 'info'
   });
 
-  useEffect(() => {
-    async function fetchNoRep() {
-      try {
-        const response = await fetch(
-          import.meta.env.VITE_API_URL + `api/get-no-rep`
-        );
-        const data = await response.json();
-        setDataNoRep(data); // <-- set the array into state
-      } catch (error) {
-        console.error("Error fetching No Report:", error);
-      }
-    }
-
-    fetchNoRep();
-  }, []);
+  const displayValue = (data) => {
+    if (typeof data === "string") return data.trim();
+    if (typeof data === "object" && "_" in data) return String(data._).trim();
+    if (data === null || data === undefined || data == "") return "-";
+    return "-";
+  };
 
   const showAlert = (message, severity) => {
     setAlert({
@@ -178,6 +122,68 @@ const Add = () => {
     setAlert((prev) => ({ ...prev, open: false }));
   };
 
+  useEffect(() => {
+    fetch(import.meta.env.VITE_API_URL + `api/get-flk-one-by-id?${id}`)
+      .then((res) => res.json())
+      .then((data) => {
+        const datas = data[0];
+        if (datas && datas.no_seri) {
+          setFormData((prev) => ({
+            ...prev,
+            ...datas,
+            waktu_call: datas.waktu_call ? dayjs(datas.waktu_call) : null,
+            waktu_dtg: datas.waktu_dtg ? dayjs(datas.waktu_dtg) : null,
+            waktu_mulai: datas.waktu_mulai ? dayjs(datas.waktu_mulai) : null,
+            waktu_selesai: datas.waktu_selesai
+              ? dayjs(datas.waktu_selesai)
+              : null,
+          }));
+
+          //fetch data customer
+          fetchDataCustomer(datas.no_seri, id);
+        } else {
+          console.error("No data found or no_seri is missing");
+        }
+      })
+      .catch((err) => console.error("Fetch failed", err));
+  }, [id]);
+
+  const fetchDataCustomer = async (no_seri, data_id) => {
+    try {
+      const fetch_customer = await fetch(
+        import.meta.env.VITE_API_URL + `api/nav-data-noseri?id=${no_seri}`
+      );
+      const data = await fetch_customer.json();
+
+      if (data.length > 0) {
+        setDataCustomer(data[0]);
+        fetchContRes(data[0]["d:Sell_to_Customer_No"], no_seri, data_id);
+      }
+    } catch (error) {
+      console.error("Error fetching customer:", error);
+    }
+  };
+
+  const fetchContRes = async (id_cus, value, data_id) => {
+    const response = await fetch(
+      import.meta.env.VITE_API_URL +
+        `api/get-rep-seri-by-cus-edit?id_cus=${id_cus}&field=no_seri&value=${value}&${data_id}`
+    );
+    const data = await response.json();
+    const incre = data[0]["rep_ke"] + 1;
+
+    if (data.length <= 0) {
+      return;
+    }
+
+    if (data[0]["status_res"] === "CONT") {
+      setFormData((prev) => ({
+        ...prev,
+        rep_ke: incre,
+      }));
+    }
+  };
+
   const handleChange = (e) => {
     setFormData({
       ...formData,
@@ -189,100 +195,25 @@ const Add = () => {
     }
   };
 
-  const fetchDataBarang = async (id) => {
-    try {
-      const fetch_barang = await fetch(
-        import.meta.env.VITE_API_URL + `api/nav-data?id=${id}`
-      );
-      const data = await fetch_barang.json();
-      const customerData = data[0];
-
-      if (data.length <= 0) {
-        showAlert("Nomor Report Belum Ada Pada Navision !", "error");
-        setSearched(false);
-        return null;
-      } else {
-        showAlert("Nomor Report Belum Dipakai.", "success");
-        setSearched(true);
-        setDataBarang(data);
-        setDataCustomer(customerData);
-        setFormData((prev) => ({
-          ...prev,
-          no_seri: customerData["d:Serial_No"],
-          no_cus: customerData["d:Sell_to_Customer_No"],
-        }));
-        return customerData;
-      }
-    } catch (error) {
-      console.error("Error fetching barang:", error);
-    }
-  };
-
-  const fetchContRes = async (id_cus, value) => {
-    const response = await fetch(
-      import.meta.env.VITE_API_URL +
-        `api/get-rep-seri-by-cus?id_cus=${id_cus}&value=${value}`
-    );
-    const data = await response.json();
-
-    if (data.length <= 0) {
-      return;
-    }
-
-    const incre = data[0]["rep_ke"] + 1;
-
-    if (data[0]["status_res"] === "CONT") {
-      setFormData({
-        ...formData,
-        rep_ke: incre,
-      });
-    }
-  };
-
-  const handleSearch = async () => {
+  const handleSearch = () => {
     setLoading(true);
 
-    if (!formData.no_rep) {
-      showAlert("Nomor Report Tidak Diperbolehkan Kosong.", "error");
+    if (!formData.no_seri) {
+      showAlert("Nomor Seri Tidak Diperbolehkan Kosong.", "error");
       setSearched(false);
       setLoading(false);
-      return;
-    }
-
-    if (data_no_rep.some((item) => item.no_rep === formData.no_rep)) {
-      showAlert("Nomor Report Sudah Pernah Dipakai.", "error");
-      setSearched(false);
+    } else {
+      fetchDataCustomer(formData.no_seri, id);
       setLoading(false);
-      return;
     }
-
-    const fetchedCustomer = await fetchDataBarang(formData.no_rep);
-    if (fetchedCustomer) {
-      fetchContRes(
-        fetchedCustomer["d:Sell_to_Customer_No"],
-        fetchedCustomer["d:Serial_No"]
-      );
-    }
-
-    setLoading(false);
   };
 
   const handleDateChange = (field, newDate) => {
     const now = dayjs();
     const diffInDays = now.diff(dayjs(newDate), "day");
 
-    if (diffInDays > import.meta.env.VITE_BACKDATE_DAYS) {
+    if (diffInDays > import.meta.env.BACKDATE_DAYS) {
       showAlert("Waktu tidak boleh lebih dari 30 hari di belakang!", "error");
-    } else if (
-      diffInDays < import.meta.env.VITE_FORWARD_PENJADWALAN_DAYS &&
-      field == "waktu_dtg"
-    ) {
-      showAlert(
-        "Waktu tidak boleh lebih dari 1 hari di depan! jadwal",
-        "error"
-      );
-    } else if (diffInDays < import.meta.env.VITE_FORWARD_DAYS) {
-      showAlert("Waktu tidak boleh lebih dari 2 hari di depan! date", "error");
     } else {
       if (field == "waktu_selesai" && formData.waktu_mulai) {
         const datang = dayjs(formData.waktu_mulai);
@@ -303,7 +234,7 @@ const Add = () => {
 
         if (dtg.isBefore(call)) {
           showAlert(
-            "Waktu Penjadwalan tidak boleh lebih awal dari waktu call.",
+            "Waktu penjadwalan tidak boleh lebih awal dari waktu call.",
             "error"
           );
           return;
@@ -317,99 +248,38 @@ const Add = () => {
     }
   };
 
-  const handleFileSelect = (file) => {
-    setFormData((prev) => ({ ...prev, pic: file }));
-  };
-
-  const handleFileError = (message) => {
-    if (message) showAlert(message, "error");
-  };
-
-  const displayValue = (data) => {
-    if (typeof data === "string") return data.trim();
-    if (typeof data === "object" && "_" in data) return String(data._).trim();
-    if (data === null || data === undefined || data == "") return "-";
-    return "-";
-  };
-
-  const submitBarang = () => {
-    const data = [];
-    barang.map((item) => {
-      const field = {
-        no_brg: item["d:ItemNo"],
-        nama: item["d:Machine_Name"],
-        qty: item["d:Quantity"]["_"],
-      };
-
-      data.push(field);
-    });
-
-    return data;
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const data = new FormData();
-    data.append("pic", formData.pic);
-    data.append("created_by", 1);
-    data.append("type", 1);
-    data.append(
-      "rep_ke",
-      formData.status_res === "CONT" ? formData.rep_ke : null
-    );
-
-    // Append all other fields
-    Object.keys(formData).forEach((key) => {
-      if (!["pic", "created_by", "type", "rep_ke"].includes(key)) {
-        data.append(key, formData[key]);
-      } else if (
-        ["waktu_call", "waktu_dtg", "waktu_mulai", "waktu_selesai"].includes(
-          key
-        )
-      ) {
-        const val = formData[key];
-        data.append(key, val.toISOString());
-      }
-    });
-
     try {
       const response = await fetch(
-        import.meta.env.VITE_API_URL + `api/create-flk`,
+        import.meta.env.VITE_API_URL + `api/edit-flk?${id}`,
         {
           method: "POST",
-          body: data,
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            ...formData,
+            rep_ke: formData.status_res === "CONT" ? formData.rep_ke : null,
+            waktu_call: formData.waktu_call.toISOString(),
+            waktu_dtg: formData.waktu_dtg.toISOString(),
+            waktu_mulai: formData.waktu_mulai.toISOString(),
+            waktu_selesai: formData.waktu_selesai.toISOString(),
+            no_cus: customer["d:Sell_to_Customer_No"],
+          }),
         }
       );
-
       const result = await response.json();
 
       if (response.ok) {
-        // After success, post the barang list
-        const barangResponse = await fetch(
-          import.meta.env.VITE_API_URL + `api/create-brg`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              no_seri: formData.no_seri, // or another foreign key
-              items: submitBarang(),
-            }),
-          }
-        );
-        const barangResult = await barangResponse.json();
-        console.log(barangResult);
-        if (barangResult.ok) {
-          // Redirect to homepage after successful submission
-          navigate("/flk", {
-            state: {
-              message: "Data Laporan Kerja Berhasil Ditambahkan!",
-              severity: "success",
-            },
-          });
-        } else {
-          showAlert("Add Data Barang Failed !!", "error");
-        }
+        // Redirect to homepage after successful submission
+        navigate("/flk-no-barang", {
+          state: {
+            message: "Data Form Laporan Kerja Berhasil Diubah!",
+            severity: "success",
+          },
+        });
       } else {
         showAlert("Failed to submit data!", "error");
       }
@@ -426,28 +296,20 @@ const Add = () => {
   return (
     <Paper sx={{ padding: 3 }} elevation={4}>
       <Typography variant="h5" marginBottom={"1.5em"} gutterBottom>
-        New Form Laporan Kerja
+        Edit Form Laporan Kerja
       </Typography>
-      <LocalizationProvider dateAdapter={AdapterDateFns}>
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
         <form onSubmit={handleSubmit}>
           <Grid container spacing={5} marginY={"2em"} alignItems="center">
             {/* Input Report */}
             <Grid size={{ xs: 12, md: 6 }}>
               <TextField
-                label="No. Report / No. Navision"
+                label="No. Seri"
                 variant="outlined"
                 fullWidth
-                value={formData.no_rep}
-                name="no_rep"
-                type="number"
+                value={formData.no_seri}
+                name="no_seri"
                 onChange={handleChange}
-                slotProps={{
-                  input: {
-                    startAdornment: (
-                      <InputAdornment position="start">SPGFI</InputAdornment>
-                    ),
-                  },
-                }}
               />
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
@@ -466,7 +328,7 @@ const Add = () => {
               {/* Accordion 1 - Non Input */}
               <Grid size={12}>
                 <Accordion
-                  disabled={!searched || !formData.no_rep}
+                  disabled={!searched || !formData.no_seri}
                   defaultExpanded
                 >
                   <AccordionSummary
@@ -521,7 +383,7 @@ const Add = () => {
               {/* Accordion 2 - Non Input */}
               <Grid size={12}>
                 <Accordion
-                  disabled={!searched || !formData.no_rep}
+                  disabled={!searched || !formData.no_seri}
                   defaultExpanded
                 >
                   <AccordionSummary
@@ -566,7 +428,7 @@ const Add = () => {
 
               {/* Accordion 3 */}
               <Grid size={12}>
-                <Accordion disabled={!searched || !formData.no_rep}>
+                <Accordion disabled={!searched || !formData.no_seri}>
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
                     aria-controls="panel1-content"
@@ -722,7 +584,7 @@ const Add = () => {
 
               {/* Accordion 4 */}
               <Grid size={12}>
-                <Accordion disabled={!searched || !formData.no_rep}>
+                <Accordion disabled={!searched || !formData.no_seri}>
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
                     aria-controls="panel1-content"
@@ -734,23 +596,6 @@ const Add = () => {
                   </AccordionSummary>
                   <AccordionDetails>
                     <Grid container spacing={5}>
-                      <Grid size={{ xs: 12, md: 6 }}>
-                        <Typography
-                          sx={{ color: "rgba(0, 0, 0, 0.6)" }}
-                          id="no_lap"
-                        >
-                          No. Laporan
-                        </Typography>
-                        <TextField
-                          variant="outlined"
-                          fullWidth
-                          value={formData.no_lap}
-                          name="no_lap"
-                          type="number"
-                          onChange={handleChange}
-                        />
-                      </Grid>
-
                       <Grid size={{ xs: 12, md: 6 }}>
                         <Typography
                           sx={{ color: "rgba(0, 0, 0, 0.6)" }}
@@ -933,71 +778,6 @@ const Add = () => {
                   </AccordionDetails>
                 </Accordion>
               </Grid>
-
-              {/* Accordion 5 - Table */}
-              <Grid size={12}>
-                <Accordion disabled={!searched || !formData.no_rep}>
-                  <AccordionSummary
-                    expandIcon={<ExpandMoreRounded />}
-                    aria-controls="panel1-content"
-                    id="panel1-header"
-                  >
-                    <Typography component="span" variant="h5">
-                      Detail Barang
-                    </Typography>
-                  </AccordionSummary>
-                  <AccordionDetails>
-                    {/* Table */}
-                    <Box sx={{ width: "100%", overflowX: "auto" }}>
-                      <Box sx={{ minWidth: 700 }}>
-                        <DataGrid
-                          rows={barang}
-                          columns={columns}
-                          getRowId={(row) => row["d:ItemNo"]}
-                          initialState={{
-                            pagination: {
-                              paginationModel: {
-                                pageSize: 5,
-                              },
-                            },
-                          }}
-                          pageSizeOptions={[5]}
-                          disableRowSelectionOnClick
-                        />
-                      </Box>
-                    </Box>
-                  </AccordionDetails>
-                </Accordion>
-              </Grid>
-
-              {/* Accordion 6 - Upload File */}
-              <Grid size={12}>
-                <Accordion
-                  disabled={!searched || !formData.no_rep}
-                  defaultExpanded
-                >
-                  <AccordionSummary
-                    expandIcon={<ExpandMoreRounded />}
-                    aria-controls="panel1-content"
-                    id="panel1-header"
-                  >
-                    <Typography component="span" variant="h5">
-                      Upload Bukti
-                    </Typography>
-                  </AccordionSummary>
-                  <AccordionDetails>
-                    {/* Upload */}
-                    <Box sx={{ width: "100%", overflowX: "auto" }}>
-                      <Box>
-                        <FileUpload
-                          onFileSelect={handleFileSelect}
-                          onError={handleFileError}
-                        />
-                      </Box>
-                    </Box>
-                  </AccordionDetails>
-                </Accordion>
-              </Grid>
             </Grid>
           </Grid>
 
@@ -1026,7 +806,7 @@ const Add = () => {
                 type="submit"
                 variant="contained"
                 color="primary"
-                disabled={!searched || !formData.no_rep}
+                disabled={!searched || !formData.no_seri}
                 sx={{ width: isSmallScreen ? "100%" : "auto" }}
               >
                 Submit
@@ -1039,4 +819,4 @@ const Add = () => {
   );
 };
 
-export default Add;
+export default EditNoSeri;
