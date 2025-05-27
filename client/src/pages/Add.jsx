@@ -385,6 +385,7 @@ const Add = () => {
       const result = await response.json();
 
       if (response.ok) {
+        const id = result.data.id;
         // After success, post the barang list
         const barangResponse = await fetch(
           import.meta.env.VITE_API_URL + `api/create-brg`,
@@ -392,13 +393,13 @@ const Add = () => {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              no_seri: formData.no_seri, // or another foreign key
+              no_lk: id, // or another foreign key
               items: submitBarang(),
             }),
           }
         );
         const barangResult = await barangResponse.json();
-        console.log(barangResult);
+
         if (barangResult.ok) {
           // Redirect to homepage after successful submission
           navigate("/flk", {

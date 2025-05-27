@@ -168,7 +168,7 @@ const Report = () => {
 
   // Export handler
   const handleExport = async () => {
-    setLoading(true);
+    // setLoading(true);
     try {
       const response = await fetch(
         import.meta.env.VITE_API_URL + `api/export-excel`,
@@ -180,7 +180,7 @@ const Report = () => {
           body: JSON.stringify({
             data: datas,
             columns: columns,
-            reportTitle: `Report_${dayjs().format("YYYY-MM-DD")}`,
+            reportTitle: `Report_${dayjs().format("DD-MM-YYYY")}`,
           }),
         }
       );
