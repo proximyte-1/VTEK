@@ -222,7 +222,8 @@ app.get("/api/get-no-rep", async (req, res) => {
 
 app.get("/api/nav-data", (req, res) => {
   const id = "SPGFI" + req.query.id;
-  const navURL = process.env.NAV_worksheet_URL + navFilterEncode("FGINO", id);
+  const navURL = process.env.NAV_WS_URL + navFilterEncode("FGINO", id);
+  console.log(navURL);
   fetchNavData(navURL, (err, data) => {
     if (err) return res.status(err.status).json(err);
     res.json(data);
@@ -413,6 +414,59 @@ app.post("/api/edit-flk", async (req, res) => {
   }
 });
 
+app.post("/api/export-data", async (req, res) => {
+  try {
+    const { dari, sampai, jenis, no_cus, no_seri } = req.body;
+
+    const conditions = [];
+    const request = pool.request();
+
+    if (jenis === "no_rep") {
+      conditions.push("type = @type");
+      request.input("type", 1);
+    } else if (jenis === "no_seri") {
+      conditions.push("type = @type");
+      request.input("type", 2);
+    }
+
+    if (dari && sampai) {
+      conditions.push(
+        "FORMAT(created_at, 'yyyy-MM-dd') BETWEEN @dari AND @sampai"
+      );
+      request.input("dari", dayjs(dari).format("YYYY-MM-DD"));
+      request.input("sampai", dayjs(sampai).format("YYYY-MM-DD"));
+    }
+
+    if (no_cus) {
+      conditions.push("no_cus = @no_cus");
+      request.input("no_cus", no_cus);
+    }
+
+    if (no_seri) {
+      conditions.push("no_seri = @no_seri");
+      request.input("no_seri", no_seri);
+    }
+
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const query = `SELECT * FROM dbo.${process.env.TABLE_LK} ${whereClause}`;
+
+    // execute
+    const result = await request.query(query);
+
+    res.json({
+      ok: true,
+      message: "Data get filter success",
+      data: result.recordset,
+    });
+  } catch (err) {
+    console.error("Get data filter error:", err);
+    res.status(500).send("Failed to get data filter");
+  }
+
+  return;
+});
+
 // === POST: Export to Excel ===
 app.post("/api/export-excel", async (req, res) => {
   try {
@@ -443,20 +497,35 @@ app.post("/api/export-excel", async (req, res) => {
     // Map items to transaction
     const mergedData = data.map((trx) => ({
       ...trx,
-      barang: mapBarang[trx.id] || [],
+      waktu_mulai: dayjs(trx.waktu_mulai).format("DD/MM/YYYY HH:mm"),
+      waktu_selesai: dayjs(trx.waktu_selesai).format("DD/MM/YYYY HH:mm"),
+      waktu_call: dayjs(trx.waktu_call).format("DD/MM/YYYY HH:mm"),
+      waktu_dtg: dayjs(trx.waktu_dtg).format("DD/MM/YYYY HH:mm"),
+      created_at: dayjs(trx.created_at).format("DD/MM/YYYY HH:mm"),
       type: trx.type === 1 ? "Dengan Barang" : "Tanpa Barang",
+      barang: mapBarang[trx.id] || [],
     }));
+
+    // console.log(mergedData);
+    // return;
 
     // ====== Start Excel Export ======
     const workbook = new ExcelJS.Workbook();
     const worksheet = workbook.addWorksheet("Report");
 
-    const dataInfo = ["Nama Pelanggan", "Alamat", "No.Seri"];
     const dataInfoVal = {
-      nama_cus: "Vincent",
-      alamat:
-        "8, Jl. Bungur Besar Raya No.89, RT.8/RW.1, Kemayoran, Kec. Kemayoran, Kota Jakarta Pusat, Daerah Khusus Ibukota Jakarta 10620",
-      no_seri: 123344,
+      // nama_cus: "Vincent",
+      // alamat:
+      //   "8, Jl. Bungur Besar Raya No.89, RT.8/RW.1, Kemayoran, Kec. Kemayoran, Kota Jakarta Pusat, Daerah Khusus Ibukota Jakarta 10620",
+      // no_seri: 123344,
+      // penanggung_jawab: "Marcel",
+      // jabatan: "Staff",
+      // telp: "987678",
+      // model: "C123",
+      // no_rangka: "CT765678",
+      // inst: "28/03/2023",
+      // con: "28/03/2024",
+      // end_con: "22/09/2025",
     };
 
     // Title row
@@ -466,12 +535,47 @@ app.post("/api/export-excel", async (req, res) => {
     worksheet.getCell("A1").alignment = { horizontal: "center" };
     worksheet.addRow([]);
 
-    worksheet.getCell("A3").value = "Nama Customer =";
-    worksheet.getCell("B3").value = dataInfoVal.nama_cus;
-    worksheet.getCell("A4").value = "Alamat";
-    worksheet.getCell("B4").value = dataInfoVal.alamat;
-    worksheet.getCell("A5").value = "No. Seri";
-    worksheet.getCell("B5").value = dataInfoVal.no_seri;
+    const infoArray = [
+      ["Nama Pelanggan", dataInfoVal.nama_cus || "-"],
+      ["No. Seri", dataInfoVal.no_seri || "-"],
+      ["Tgl Install", dataInfoVal.inst || "-"],
+      ["Alamat", dataInfoVal.alamat || "-"],
+      ["Model", dataInfoVal.model || "-"],
+      ["Tgl Kontrak", dataInfoVal.con || "-"],
+      ["Penanggung Jawab", dataInfoVal.penanggung_jawab || "-"],
+      ["No. Rangka", dataInfoVal.no_rangka || "-"],
+      ["Tgl Akhir Kontrak", dataInfoVal.end_con || "-"],
+      ["Jabatan", dataInfoVal.jabatan || "-"],
+      ["No. Telp", dataInfoVal.telp || "-"],
+    ];
+
+    // Add a single row with this info (e.g., row 3)
+    const infoRow = worksheet.addRow([]);
+
+    // Split into chunks (3 items per row)
+    const chunkSize = 3;
+    for (let i = 0; i < infoArray.length; i += chunkSize) {
+      const chunk = infoArray.slice(i, i + chunkSize);
+      const row = worksheet.addRow([]);
+
+      let colIndex = 1;
+      chunk.forEach(([label, value]) => {
+        const labelCell = row.getCell(colIndex++);
+        // const equalsCell = row.getCell(colIndex++);
+        const valueCell = row.getCell(colIndex++);
+        const gapCell = row.getCell(colIndex++);
+
+        labelCell.value = label;
+        labelCell.font = { bold: true };
+
+        // equalsCell.value = "=";
+        // equalsCell.alignment = { horizontal: "center" };
+
+        valueCell.value = "= " + value;
+        valueCell.alignment = { wrapText: true };
+      });
+    }
+
     worksheet.addRow([]);
 
     // Assume your column setup
@@ -544,12 +648,22 @@ app.post("/api/export-excel", async (req, res) => {
 
     // Auto-fit columns
     worksheet.columns.forEach((col) => {
-      let maxLength = 10;
+      let maxLength = 7;
+
       col.eachCell({ includeEmpty: true }, (cell) => {
         const val = cell.value ? cell.value.toString() : "";
         maxLength = Math.max(maxLength, val.length);
+
+        // Apply wrap text + alignment to all cells
+        cell.alignment = {
+          wrapText: true,
+          vertical: "middle",
+          horizontal: "left",
+        };
       });
-      col.width = maxLength + 2;
+
+      // Set column width with padding
+      col.width = Math.min(maxLength + 2, 50); // Limit to max width
     });
 
     // Send the Excel file to the client

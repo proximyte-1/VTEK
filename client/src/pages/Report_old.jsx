@@ -19,7 +19,6 @@ import {
   Select,
   MenuItem,
   CircularProgress,
-  TextField,
 } from "@mui/material";
 import dayjs from "dayjs";
 import { DataGrid } from "@mui/x-data-grid";
@@ -34,8 +33,6 @@ const Report = () => {
     waktu_dari: null,
     waktu_sampai: null,
     type: "",
-    no_cus: "",
-    no_seri: "",
   });
 
   const [exp_columns, setExpColumns] = useState([
@@ -213,7 +210,7 @@ const Report = () => {
 
   // Export handler
   const handleExport = async () => {
-    setLoading(true);
+    // setLoading(true);
     try {
       const response = await fetch(
         import.meta.env.VITE_API_URL + `api/export-excel`,
@@ -225,7 +222,7 @@ const Report = () => {
           body: JSON.stringify({
             data: datas,
             columns: exp_columns,
-            reportTitle: `Report ${dayjs().format("DD-MM-YYYY")}`,
+            reportTitle: `Report_${dayjs().format("DD-MM-YYYY")}`,
           }),
         }
       );
@@ -237,7 +234,7 @@ const Report = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `Report ${dayjs().format("DD-MM-YYYY")}.xlsx`;
+      link.download = `report_${dayjs().format("DD_MM_YYYY")}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -262,8 +259,8 @@ const Report = () => {
             dari: dataFilter.waktu_dari,
             sampai: dataFilter.waktu_sampai,
             jenis: dataFilter.type,
-            no_cus: dataFilter.no_cus,
-            no_seri: dataFilter.no_seri,
+            // no_cus: dataFilter.no_cus,
+            // no_seri: dataFilter.no_seri,
           }),
         }
       );
@@ -271,12 +268,11 @@ const Report = () => {
       if (!response.ok) throw new Error("Filter Failed");
 
       const data = await response.json();
-      setDatas(data.data); // <-- set the array into state
+      setDatas(data); // <-- set the array into state
       setLoading(false);
     } catch (err) {
       console.error("Filter error : ", err);
       showAlert("Filter Failed !!", "error");
-      setLoading(false);
     }
   };
 
@@ -301,7 +297,6 @@ const Report = () => {
                 maxDate={dayjs()}
               />
             </Grid>
-
             <Grid size={{ xs: 12, md: 6 }}>
               <InputLabel id="waktu_sampai">Waktu Sampai</InputLabel>
               <DatePicker
@@ -335,30 +330,6 @@ const Report = () => {
                 ))}
               </Select>
             </Grid>
-
-            <Grid size={{ xs: 12, md: 6 }}>
-              <InputLabel id="no_cus">No. Customer</InputLabel>
-              <TextField
-                variant="outlined"
-                fullWidth
-                value={dataFilter.no_cus}
-                name="no_cus"
-                onChange={handleChange}
-              />
-            </Grid>
-
-            <Grid size={{ xs: 12, md: 6 }}>
-              <InputLabel id="no_seri">No. Seri</InputLabel>
-              <TextField
-                variant="outlined"
-                fullWidth
-                value={dataFilter.no_seri}
-                name="no_seri"
-                onChange={handleChange}
-                disabled={dataFilter.no_cus == "" ? true : false}
-              />
-            </Grid>
-
             <Grid size={{ xs: 12, md: 6 }}>
               <Button
                 variant="contained"

@@ -179,10 +179,10 @@ const Add = () => {
   };
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
+    setFormData((prev) => ({
+      ...prev,
       [e.target.name]: e.target.value,
-    });
+    }));
 
     if (e.target.name === "status_res") {
       setStatusRes(e.target.value);
