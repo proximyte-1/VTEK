@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   TextField,
   Button,
@@ -25,6 +25,7 @@ import {
   Link,
   CircularProgress,
   InputAdornment,
+  Box,
 } from "@mui/material";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
@@ -34,6 +35,8 @@ import { useNavigate } from "react-router-dom";
 import { useParams } from "react-router-dom";
 import dayjs from "dayjs";
 import NumberFormatTextField from "../components/NumberFormatTextField/NumberFormatTextField";
+import debounce from "lodash.debounce";
+import FileUpload from "../components/FileUpload/FileUpload";
 
 const EditNoSeri = () => {
   const { id } = useParams();
@@ -41,6 +44,7 @@ const EditNoSeri = () => {
 
   const [formData, setFormData] = useState({
     no_seri: "",
+    no_lap: "",
     type: "",
     no_cus: "",
     no_call: "",
@@ -58,6 +62,7 @@ const EditNoSeri = () => {
     count_bw: "",
     count_cl: "",
     saran: "",
+    pic: "",
     status_res: "",
     rep_ke: 0,
   });
@@ -96,6 +101,7 @@ const EditNoSeri = () => {
   const [customer, setDataCustomer] = useState([]);
   const [searched, setSearched] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [expand, setExpand] = useState(true);
   const [statusRes, setStatusRes] = useState([]);
   const [alert, setAlert] = useState({
     open: false,
@@ -123,10 +129,14 @@ const EditNoSeri = () => {
   };
 
   useEffect(() => {
-    fetch(import.meta.env.VITE_API_URL + `api/get-flk-one-by-id?${id}`)
-      .then((res) => res.json())
-      .then((data) => {
+    const fetchFlkData = async () => {
+      try {
+        const response = await fetch(
+          import.meta.env.VITE_API_URL + `api/get-flk-one-by-id?${id}`
+        );
+        const data = await response.json();
         const datas = data[0];
+
         if (datas && datas.no_seri) {
           setFormData((prev) => ({
             ...prev,
@@ -140,12 +150,17 @@ const EditNoSeri = () => {
           }));
 
           //fetch data customer
-          fetchDataCustomer(datas.no_seri, id);
+          await fetchDataCustomer(datas.no_seri, id);
+          setExpand(false);
         } else {
           console.error("No data found or no_seri is missing");
         }
-      })
-      .catch((err) => console.error("Fetch failed", err));
+      } catch (error) {
+        console.error("Fetch failed:", error);
+      }
+    };
+
+    fetchFlkData(id);
   }, [id]);
 
   const fetchDataCustomer = async (no_seri, data_id) => {
@@ -164,10 +179,10 @@ const EditNoSeri = () => {
     }
   };
 
-  const fetchContRes = async (id_cus, value, data_id) => {
+  const fetchContRes = async (no_cus, no_seri, id) => {
     const response = await fetch(
       import.meta.env.VITE_API_URL +
-        `api/get-rep-seri-by-cus-edit?id_cus=${id_cus}&field=no_seri&value=${value}&${data_id}`
+        `api/get-rep-seri-by-cus-edit?no_cus=${no_cus}&no_seri=${no_seri}&${id}`
     );
     const data = await response.json();
     const incre = data[0]["rep_ke"] + 1;
@@ -184,36 +199,51 @@ const EditNoSeri = () => {
     }
   };
 
+  const debouncedUpdate = useCallback(
+    debounce((name, value) => {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }, 10),
+    []
+  );
+
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+
+    // Update debounced form state
+    debouncedUpdate(name, value);
 
     if (e.target.name === "status_res") {
       setStatusRes(e.target.value);
     }
   };
 
-  const handleSearch = () => {
-    setLoading(true);
+  const handleFileSelect = (file) => {
+    setFormData((prev) => ({ ...prev, pic: file }));
+  };
 
-    if (!formData.no_seri) {
-      showAlert("Nomor Seri Tidak Diperbolehkan Kosong.", "error");
-      setSearched(false);
-      setLoading(false);
-    } else {
-      fetchDataCustomer(formData.no_seri, id);
-      setLoading(false);
-    }
+  const handleFileError = (message) => {
+    if (message) showAlert(message, "error");
   };
 
   const handleDateChange = (field, newDate) => {
     const now = dayjs();
     const diffInDays = now.diff(dayjs(newDate), "day");
 
-    if (diffInDays > import.meta.env.BACKDATE_DAYS) {
+    if (diffInDays > import.meta.env.VITE_BACKDATE_DAYS) {
       showAlert("Waktu tidak boleh lebih dari 30 hari di belakang!", "error");
+    } else if (
+      diffInDays < import.meta.env.VITE_FORWARD_PENJADWALAN_DAYS &&
+      field == "waktu_dtg"
+    ) {
+      showAlert(
+        "Waktu tidak boleh lebih dari 1 hari di depan! jadwal",
+        "error"
+      );
+    } else if (diffInDays < import.meta.env.VITE_FORWARD_DAYS) {
+      showAlert("Waktu tidak boleh lebih dari 2 hari di depan! date", "error");
     } else {
       if (field == "waktu_selesai" && formData.waktu_mulai) {
         const datang = dayjs(formData.waktu_mulai);
@@ -234,7 +264,7 @@ const EditNoSeri = () => {
 
         if (dtg.isBefore(call)) {
           showAlert(
-            "Waktu penjadwalan tidak boleh lebih awal dari waktu call.",
+            "Waktu Penjadwalan tidak boleh lebih awal dari waktu call.",
             "error"
           );
           return;
@@ -250,33 +280,48 @@ const EditNoSeri = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
+
+    const data = new FormData();
+    data.append("pic", formData.pic);
+    data.append("created_by", 1);
+    data.append("type", 2);
+    data.append(
+      "rep_ke",
+      formData.status_res === "CONT" ? formData.rep_ke : null
+    );
+
+    // Append all other fields
+    Object.keys(formData).forEach((key) => {
+      if (!["pic", "created_by", "type", "rep_ke"].includes(key)) {
+        data.append(key, formData[key]);
+      } else if (
+        ["waktu_call", "waktu_dtg", "waktu_mulai", "waktu_selesai"].includes(
+          key
+        )
+      ) {
+        const val = formData[key];
+        data.append(key, val.toISOString());
+      }
+    });
 
     try {
       const response = await fetch(
         import.meta.env.VITE_API_URL + `api/edit-flk?${id}`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            ...formData,
-            rep_ke: formData.status_res === "CONT" ? formData.rep_ke : null,
-            waktu_call: formData.waktu_call.toISOString(),
-            waktu_dtg: formData.waktu_dtg.toISOString(),
-            waktu_mulai: formData.waktu_mulai.toISOString(),
-            waktu_selesai: formData.waktu_selesai.toISOString(),
-            no_cus: customer["d:Sell_to_Customer_No"],
-          }),
+          body: data,
         }
       );
+
       const result = await response.json();
+      setLoading(false);
 
       if (response.ok) {
         // Redirect to homepage after successful submission
         navigate("/flk-no-barang", {
           state: {
-            message: "Data Form Laporan Kerja Berhasil Diubah!",
+            message: "Data Laporan Kerja Berhasil Diubah!",
             severity: "success",
           },
         });
@@ -286,6 +331,7 @@ const EditNoSeri = () => {
     } catch (error) {
       console.error("Error submitting data:", error);
       showAlert("Something went wrong!", "error");
+      setLoading(false);
     }
   };
 
@@ -309,27 +355,15 @@ const EditNoSeri = () => {
                 fullWidth
                 value={formData.no_seri}
                 name="no_seri"
-                onChange={handleChange}
+                aria-readonly
               />
-            </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Button
-                type="button"
-                name="search"
-                id="search"
-                variant="contained"
-                color="primary"
-                onClick={handleSearch}
-              >
-                {loading ? <CircularProgress size={24} /> : "Search"}
-              </Button>
             </Grid>
             <Grid container spacing={5}>
               {/* Accordion 1 - Non Input */}
               <Grid size={12}>
                 <Accordion
                   disabled={!searched || !formData.no_seri}
-                  defaultExpanded
+                  expanded={!expand}
                 >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
@@ -384,7 +418,7 @@ const EditNoSeri = () => {
               <Grid size={12}>
                 <Accordion
                   disabled={!searched || !formData.no_seri}
-                  defaultExpanded
+                  expanded={!expand}
                 >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
@@ -428,7 +462,10 @@ const EditNoSeri = () => {
 
               {/* Accordion 3 */}
               <Grid size={12}>
-                <Accordion disabled={!searched || !formData.no_seri}>
+                <Accordion
+                  disabled={!searched || !formData.no_seri}
+                  expanded={!expand}
+                >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
                     aria-controls="panel1-content"
@@ -584,7 +621,10 @@ const EditNoSeri = () => {
 
               {/* Accordion 4 */}
               <Grid size={12}>
-                <Accordion disabled={!searched || !formData.no_seri}>
+                <Accordion
+                  disabled={!searched || !formData.no_seri}
+                  expanded={!expand}
+                >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
                     aria-controls="panel1-content"
@@ -596,6 +636,23 @@ const EditNoSeri = () => {
                   </AccordionSummary>
                   <AccordionDetails>
                     <Grid container spacing={5}>
+                      <Grid size={{ xs: 12, md: 6 }}>
+                        <Typography
+                          sx={{ color: "rgba(0, 0, 0, 0.6)" }}
+                          id="no_lap"
+                        >
+                          No. Laporan
+                        </Typography>
+                        <TextField
+                          variant="outlined"
+                          fullWidth
+                          value={formData.no_lap}
+                          name="no_lap"
+                          type="number"
+                          onChange={handleChange}
+                        />
+                      </Grid>
+
                       <Grid size={{ xs: 12, md: 6 }}>
                         <Typography
                           sx={{ color: "rgba(0, 0, 0, 0.6)" }}
@@ -778,6 +835,35 @@ const EditNoSeri = () => {
                   </AccordionDetails>
                 </Accordion>
               </Grid>
+
+              {/* Accordion 5 - Upload File */}
+              <Grid size={12}>
+                <Accordion
+                  disabled={!searched || !formData.no_seri}
+                  expanded={!expand}
+                >
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreRounded />}
+                    aria-controls="panel1-content"
+                    id="panel1-header"
+                  >
+                    <Typography component="span" variant="h5">
+                      Upload Bukti
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    {/* Upload */}
+                    <Box sx={{ width: "100%", overflowX: "auto" }}>
+                      <Box>
+                        <FileUpload
+                          onFileSelect={handleFileSelect}
+                          onError={handleFileError}
+                        />
+                      </Box>
+                    </Box>
+                  </AccordionDetails>
+                </Accordion>
+              </Grid>
             </Grid>
           </Grid>
 
@@ -809,7 +895,7 @@ const EditNoSeri = () => {
                 disabled={!searched || !formData.no_seri}
                 sx={{ width: isSmallScreen ? "100%" : "auto" }}
               >
-                Submit
+                {loading ? <CircularProgress size={24} /> : "Submit"}
               </Button>
             </Grid>
           </Grid>

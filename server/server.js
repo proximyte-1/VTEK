@@ -168,11 +168,11 @@ app.get("/api/get-flk-norep", async (req, res) => {
 });
 
 app.get("/api/get-rep-seri-by-cus", async (req, res) => {
-  const { id_cus = "", value = "" } = req.query;
+  const { id_cus = "", no_seri = "", id = "" } = req.query;
   try {
     const query = `
       SELECT TOP 1 status_res, rep_ke FROM dbo.${process.env.TABLE_LK}
-      WHERE no_cus = '${id_cus}' AND no_seri = '${value}'
+      WHERE no_cus = '${id_cus}' AND no_seri = '${no_seri}' AND id != '${id}'
       ORDER BY id DESC
     `;
     const result = await pool.query(query);
@@ -183,13 +183,14 @@ app.get("/api/get-rep-seri-by-cus", async (req, res) => {
 });
 
 app.get("/api/get-rep-seri-by-cus-edit", async (req, res) => {
-  const { id_cus, id, value } = req.query;
   try {
+    const { no_cus = "", id = "", no_seri = "" } = req.query;
     const query = `
       SELECT TOP 1 status_res, rep_ke FROM dbo.${process.env.TABLE_LK}
-      WHERE no_cus = ${id_cus} AND no_seri = ${value} AND id != ${id}
+      WHERE no_cus = '${no_cus}' AND no_seri = '${no_seri}' AND id != '${id}'
       ORDER BY id DESC
     `;
+
     const result = await pool.query(query);
     res.json(result.recordset);
   } catch (err) {
@@ -321,7 +322,7 @@ app.post("/api/create-flk", upload.single("pic"), async (req, res) => {
 
 // === POST: Create Barang ===
 app.post("/api/create-brg", async (req, res) => {
-  const { no_lk, barang } = req.body;
+  const { no_lk, items } = req.body;
 
   if (!no_lk || !Array.isArray(items)) {
     return res.status(400).json({ ok: false, message: "Invalid Input" });
@@ -349,16 +350,13 @@ app.post("/api/create-brg", async (req, res) => {
 });
 
 // === POST: Edit FLK by ID ===
-app.post("/api/edit-flk", async (req, res) => {
-  const { id } = req.query;
-  const data = req.body;
-
-  const toNullableInt = (val) =>
-    val === "" || val === "null" ? null : parseInt(val);
-
+app.post("/api/edit-flk", upload.single("pic"), async (req, res) => {
   try {
+    const { id } = req.query;
+    const fields = req.body;
+    const file = req.file;
+
     const {
-      no_rep,
       no_seri,
       no_cus,
       no_call,
@@ -373,30 +371,51 @@ app.post("/api/edit-flk", async (req, res) => {
       solusi,
       waktu_mulai,
       waktu_selesai,
-      count_bw,
-      count_cl,
       saran,
       status_res,
-      rep_ke,
-    } = data;
+      no_lap,
+    } = fields;
 
-    await pool.query`
+    // Sanitize Null
+    const rep_ke = toNullableInt(fields.rep_ke);
+    const no_rep = toNullableInt(fields.no_rep);
+    const count_bw = toNullableInt(fields.count_bw);
+    const count_cl = toNullableInt(fields.count_cl);
+
+    const call = formatDateForSQL(waktu_call);
+    const dtg = formatDateForSQL(waktu_dtg);
+    const mulai = formatDateForSQL(waktu_mulai);
+    const selesai = formatDateForSQL(waktu_selesai);
+
+    let query = `
       UPDATE [dbo].[WebVTK]
       SET 
-        no_rep = ${no_rep}, no_seri = ${no_seri}, no_cus = ${no_cus},
-        no_call = ${no_call}, pelapor = ${pelapor}, waktu_call = ${waktu_call},
-        waktu_dtg = ${waktu_dtg}, status_call = ${status_call},
-        keluhan = ${keluhan}, kat_keluhan = ${kat_keluhan},
-        problem = ${problem}, kat_problem = ${kat_problem}, solusi = ${solusi},
-        waktu_mulai = ${waktu_mulai}, waktu_selesai = ${waktu_selesai},
-        count_bw = ${toNullableInt(count_bw)}, count_cl = ${toNullableInt(
-      count_cl
-    )},
-        saran = ${saran}, status_res = ${status_res}, rep_ke = ${toNullableInt(
-      rep_ke
-    )}
-      WHERE id = ${id}
+        no_seri = '${no_seri}', no_cus = '${no_cus}',
+        no_call = '${no_call}', pelapor = '${pelapor}', waktu_call = '${call}',
+        waktu_dtg = '${dtg}', status_call = '${status_call}',
+        keluhan = '${keluhan}', kat_keluhan = '${kat_keluhan}',
+        problem = '${problem}', kat_problem = '${kat_problem}', solusi = '${solusi}',
+        waktu_mulai = '${mulai}', waktu_selesai = '${selesai}',
+        count_bw = '${count_bw}', count_cl = '${count_cl}',
+        saran = '${saran}', status_res = '${status_res}', no_lap = '${no_lap}'
     `;
+
+    if (rep_ke) {
+      query += `, rep_ke = '${rep_ke}'`;
+    }
+
+    if (no_rep) {
+      query += `, no_rep = '${no_rep}'`;
+    }
+
+    if (file) {
+      const filePath = path.join(uploadPath, file.filename);
+      query += `, pic = '${filePath}'`;
+    }
+
+    query += ` WHERE id = ${id}`;
+
+    await pool.query(query);
 
     res.json({
       ok: true,
@@ -494,20 +513,30 @@ app.post("/api/export-excel", async (req, res) => {
       });
     }
 
-    // Map items to transaction
-    const mergedData = data.map((trx) => ({
-      ...trx,
-      waktu_mulai: dayjs(trx.waktu_mulai).format("DD/MM/YYYY HH:mm"),
-      waktu_selesai: dayjs(trx.waktu_selesai).format("DD/MM/YYYY HH:mm"),
-      waktu_call: dayjs(trx.waktu_call).format("DD/MM/YYYY HH:mm"),
-      waktu_dtg: dayjs(trx.waktu_dtg).format("DD/MM/YYYY HH:mm"),
-      created_at: dayjs(trx.created_at).format("DD/MM/YYYY HH:mm"),
-      type: trx.type === 1 ? "Dengan Barang" : "Tanpa Barang",
-      barang: mapBarang[trx.id] || [],
-    }));
+    const sanitizeFields = (data) => {
+      const sanitized = {};
+      for (const key in data) {
+        sanitized[key] =
+          data[key] != null && data[key] !== "" ? data[key] : "-";
+      }
+      return sanitized;
+    };
 
-    // console.log(mergedData);
-    // return;
+    // Map items to transaction
+    const mergedData = data.map((trx) => {
+      const safeTrx = sanitizeFields(trx);
+
+      return {
+        ...safeTrx,
+        waktu_mulai: dayjs(trx.waktu_mulai).format("DD/MM/YYYY HH:mm"),
+        waktu_selesai: dayjs(trx.waktu_selesai).format("DD/MM/YYYY HH:mm"),
+        waktu_call: dayjs(trx.waktu_call).format("DD/MM/YYYY HH:mm"),
+        waktu_dtg: dayjs(trx.waktu_dtg).format("DD/MM/YYYY HH:mm"),
+        created_at: dayjs(trx.created_at).format("DD/MM/YYYY HH:mm"),
+        type: trx.type === 1 ? "Dengan Barang" : "Tanpa Barang",
+        barang: mapBarang[trx.id] || [],
+      };
+    });
 
     // ====== Start Excel Export ======
     const workbook = new ExcelJS.Workbook();
@@ -572,7 +601,7 @@ app.post("/api/export-excel", async (req, res) => {
         // equalsCell.alignment = { horizontal: "center" };
 
         valueCell.value = "= " + value;
-        valueCell.alignment = { wrapText: true };
+        valueCell.alignment = { wrapText: true, shrinkToFit: true };
       });
     }
 
@@ -648,7 +677,7 @@ app.post("/api/export-excel", async (req, res) => {
 
     // Auto-fit columns
     worksheet.columns.forEach((col) => {
-      let maxLength = 7;
+      let maxLength = 5;
 
       col.eachCell({ includeEmpty: true }, (cell) => {
         const val = cell.value ? cell.value.toString() : "";

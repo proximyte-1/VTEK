@@ -27,6 +27,7 @@ import {
   InputAdornment,
   Box,
 } from "@mui/material";
+import { styled } from "@mui/material/styles";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
@@ -35,12 +36,15 @@ import dayjs from "dayjs";
 import { useNavigate } from "react-router-dom";
 import { DataGrid } from "@mui/x-data-grid";
 import NumberFormatTextField from "../components/NumberFormatTextField/NumberFormatTextField";
+import FileUpload from "../components/FileUpload/FileUpload";
 
 const Add = () => {
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
     no_rep: "",
+    no_seri: "",
+    no_lap: "",
     no_cus: "",
     no_call: "",
     pelapor: "",
@@ -57,8 +61,9 @@ const Add = () => {
     count_bw: "",
     count_cl: "",
     saran: "",
+    pic: null,
     status_res: "",
-    rep_ke: "",
+    rep_ke: 0,
   });
 
   const selectStatusCall = {
@@ -91,6 +96,18 @@ const Add = () => {
     TS: "Technical Support",
     SS: "Software Support",
   };
+
+  const VisuallyHiddenInput = styled("input")({
+    clip: "rect(0 0 0 0)",
+    clipPath: "inset(50%)",
+    height: 1,
+    overflow: "hidden",
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    whiteSpace: "nowrap",
+    width: 1,
+  });
 
   const columns = [
     {
@@ -162,76 +179,110 @@ const Add = () => {
   };
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
+    setFormData((prev) => ({
+      ...prev,
       [e.target.name]: e.target.value,
-    });
+    }));
 
     if (e.target.name === "status_res") {
       setStatusRes(e.target.value);
     }
   };
 
-  async function fetchDataBarang(id) {
+  const fetchDataBarang = async (id) => {
     try {
       const fetch_barang = await fetch(
         import.meta.env.VITE_API_URL + `api/nav-data?id=${id}`
       );
       const data = await fetch_barang.json();
+      const customerData = data[0];
 
       if (data.length <= 0) {
         showAlert("Nomor Report Belum Ada Pada Navision !", "error");
         setSearched(false);
+        return null;
       } else {
         showAlert("Nomor Report Belum Dipakai.", "success");
         setSearched(true);
         setDataBarang(data);
-        setDataCustomer(data[0]);
-        // setReportKe(data[0]["d:Sell_to_Customer_No"]);
+        setDataCustomer(customerData);
+        setFormData((prev) => ({
+          ...prev,
+          no_seri: customerData["d:Serial_No"],
+          no_cus: customerData["d:Sell_to_Customer_No"],
+        }));
+        return customerData;
       }
     } catch (error) {
       console.error("Error fetching barang:", error);
     }
-  }
+  };
 
-  const setReportKe = async (id_cus) => {
+  const fetchContRes = async (id_cus, value) => {
     const response = await fetch(
-      import.meta.env.VITE_API_URL + `api/get-rep-by-cus?id_cus=${id_cus}`
+      import.meta.env.VITE_API_URL +
+        `api/get-rep-seri-by-cus?id_cus=${id_cus}&value=${value}`
     );
     const data = await response.json();
 
-    if (data[0]["status_rep"] === "CONT") {
-      // const res = formData.rep_ke = data[0]["rep_ke"] + 1;
+    if (data.length <= 0) {
+      return;
+    }
+
+    const incre = data[0]["rep_ke"] + 1;
+
+    if (data[0]["status_res"] === "CONT") {
       setFormData({
         ...formData,
-        [rep_ke]: (data[0]["rep_ke"] || 0) + 1,
+        rep_ke: incre,
       });
     }
   };
 
-  const handleSearch = () => {
+  const handleSearch = async () => {
     setLoading(true);
 
     if (!formData.no_rep) {
       showAlert("Nomor Report Tidak Diperbolehkan Kosong.", "error");
       setSearched(false);
       setLoading(false);
-    } else if (data_no_rep.some((item) => item.no_rep === formData.no_rep)) {
+      return;
+    }
+
+    if (data_no_rep.some((item) => item.no_rep === formData.no_rep)) {
       showAlert("Nomor Report Sudah Pernah Dipakai.", "error");
       setSearched(false);
       setLoading(false);
-    } else {
-      fetchDataBarang(formData.no_rep);
-      setLoading(false);
+      return;
     }
+
+    const fetchedCustomer = await fetchDataBarang(formData.no_rep);
+    if (fetchedCustomer) {
+      fetchContRes(
+        fetchedCustomer["d:Sell_to_Customer_No"],
+        fetchedCustomer["d:Serial_No"]
+      );
+    }
+
+    setLoading(false);
   };
 
   const handleDateChange = (field, newDate) => {
     const now = dayjs();
     const diffInDays = now.diff(dayjs(newDate), "day");
 
-    if (diffInDays > import.meta.env.BACKDATE_DAYS) {
+    if (diffInDays > import.meta.env.VITE_BACKDATE_DAYS) {
       showAlert("Waktu tidak boleh lebih dari 30 hari di belakang!", "error");
+    } else if (
+      diffInDays < import.meta.env.VITE_FORWARD_PENJADWALAN_DAYS &&
+      field == "waktu_dtg"
+    ) {
+      showAlert(
+        "Waktu tidak boleh lebih dari 1 hari di depan! jadwal",
+        "error"
+      );
+    } else if (diffInDays < import.meta.env.VITE_FORWARD_DAYS) {
+      showAlert("Waktu tidak boleh lebih dari 2 hari di depan! date", "error");
     } else {
       if (field == "waktu_selesai" && formData.waktu_mulai) {
         const datang = dayjs(formData.waktu_mulai);
@@ -266,6 +317,14 @@ const Add = () => {
     }
   };
 
+  const handleFileSelect = (file) => {
+    setFormData((prev) => ({ ...prev, pic: file }));
+  };
+
+  const handleFileError = (message) => {
+    if (message) showAlert(message, "error");
+  };
+
   const displayValue = (data) => {
     if (typeof data === "string") return data.trim();
     if (typeof data === "object" && "_" in data) return String(data._).trim();
@@ -273,45 +332,85 @@ const Add = () => {
     return "-";
   };
 
+  const submitBarang = () => {
+    const data = [];
+    barang.map((item) => {
+      const field = {
+        no_brg: item["d:ItemNo"],
+        nama: item["d:Machine_Name"],
+        qty: item["d:Quantity"]["_"],
+      };
+
+      data.push(field);
+    });
+
+    return data;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const now = dayjs();
+    const data = new FormData();
+    data.append("pic", formData.pic);
+    data.append("created_by", 1);
+    data.append("type", 1);
+    data.append(
+      "rep_ke",
+      formData.status_res === "CONT" ? formData.rep_ke : null
+    );
+
+    // Append all other fields
+    Object.keys(formData).forEach((key) => {
+      if (!["pic", "created_by", "type", "rep_ke"].includes(key)) {
+        data.append(key, formData[key]);
+      } else if (
+        ["waktu_call", "waktu_dtg", "waktu_mulai", "waktu_selesai"].includes(
+          key
+        )
+      ) {
+        const val = formData[key];
+        data.append(key, val.toISOString());
+      }
+    });
 
     try {
       const response = await fetch(
         import.meta.env.VITE_API_URL + `api/create-flk`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            ...formData,
-            waktu_call: formData.waktu_call.toISOString(),
-            waktu_dtg: formData.waktu_dtg.toISOString(),
-            waktu_mulai: formData.waktu_mulai.toISOString(),
-            waktu_selesai: formData.waktu_selesai.toISOString(),
-            no_cus: customer["d:Sell_to_Customer_No"],
-            created_by: 1,
-            type: 1,
-            created_at: now.toISOString(),
-          }),
+          body: data,
         }
       );
 
       const result = await response.json();
 
-      console.log(result);
-
       if (response.ok) {
-        // Redirect to homepage after successful submission
-        navigate("/flk", {
-          state: {
-            message: "Data Form Laporan Kerja Berhasil Ditambahkan!",
-            severity: "success",
-          },
-        });
+        const id = result.data.id;
+        // After success, post the barang list
+        const barangResponse = await fetch(
+          import.meta.env.VITE_API_URL + `api/create-brg`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              no_lk: id, // or another foreign key
+              items: submitBarang(),
+            }),
+          }
+        );
+        const barangResult = await barangResponse.json();
+
+        if (barangResult.ok) {
+          // Redirect to homepage after successful submission
+          navigate("/flk", {
+            state: {
+              message: "Data Laporan Kerja Berhasil Ditambahkan!",
+              severity: "success",
+            },
+          });
+        } else {
+          showAlert("Add Data Barang Failed !!", "error");
+        }
       } else {
         showAlert("Failed to submit data!", "error");
       }
@@ -639,6 +738,23 @@ const Add = () => {
                       <Grid size={{ xs: 12, md: 6 }}>
                         <Typography
                           sx={{ color: "rgba(0, 0, 0, 0.6)" }}
+                          id="no_lap"
+                        >
+                          No. Laporan
+                        </Typography>
+                        <TextField
+                          variant="outlined"
+                          fullWidth
+                          value={formData.no_lap}
+                          name="no_lap"
+                          type="number"
+                          onChange={handleChange}
+                        />
+                      </Grid>
+
+                      <Grid size={{ xs: 12, md: 6 }}>
+                        <Typography
+                          sx={{ color: "rgba(0, 0, 0, 0.6)" }}
                           id="problem"
                         >
                           Problem
@@ -848,6 +964,35 @@ const Add = () => {
                           }}
                           pageSizeOptions={[5]}
                           disableRowSelectionOnClick
+                        />
+                      </Box>
+                    </Box>
+                  </AccordionDetails>
+                </Accordion>
+              </Grid>
+
+              {/* Accordion 6 - Upload File */}
+              <Grid size={12}>
+                <Accordion
+                  disabled={!searched || !formData.no_rep}
+                  defaultExpanded
+                >
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreRounded />}
+                    aria-controls="panel1-content"
+                    id="panel1-header"
+                  >
+                    <Typography component="span" variant="h5">
+                      Upload Bukti
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    {/* Upload */}
+                    <Box sx={{ width: "100%", overflowX: "auto" }}>
+                      <Box>
+                        <FileUpload
+                          onFileSelect={handleFileSelect}
+                          onError={handleFileError}
                         />
                       </Box>
                     </Box>

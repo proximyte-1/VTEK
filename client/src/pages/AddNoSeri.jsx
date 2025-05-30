@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   TextField,
   Button,
@@ -25,6 +25,7 @@ import {
   Link,
   CircularProgress,
   InputAdornment,
+  Box,
 } from "@mui/material";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
@@ -33,6 +34,8 @@ import { ExpandMoreRounded } from "@mui/icons-material";
 import dayjs from "dayjs";
 import { useNavigate } from "react-router-dom";
 import NumberFormatTextField from "../components/NumberFormatTextField/NumberFormatTextField";
+import debounce from "lodash.debounce";
+import FileUpload from "../components/FileUpload/FileUpload";
 
 const AddNoSeri = () => {
   const navigate = useNavigate();
@@ -40,6 +43,7 @@ const AddNoSeri = () => {
   const [formData, setFormData] = useState({
     no_seri: "",
     no_cus: "",
+    no_lap: "",
     no_call: "",
     pelapor: "",
     waktu_call: null,
@@ -55,6 +59,7 @@ const AddNoSeri = () => {
     count_bw: "",
     count_cl: "",
     saran: "",
+    pic: null,
     status_res: "",
     rep_ke: 0,
   });
@@ -94,6 +99,7 @@ const AddNoSeri = () => {
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [statusRes, setStatusRes] = useState([]);
+  const [expand, setExpand] = useState(true);
   const [alert, setAlert] = useState({
     open: false,
     message: "",
@@ -112,34 +118,28 @@ const AddNoSeri = () => {
     setAlert((prev) => ({ ...prev, open: false }));
   };
 
-  // useEffect(() => {
-  //   async function fetchNoSeri() {
-  //     try {
-  //       const response = await fetch(
-  //         import.meta.env.VITE_API_URL + `api/get-no-rep`
-  //       );
-  //       const data = await response.json();
-  //       setDataNoRep(data);
-  //     } catch (error) {
-  //       console.error("Error fetching No Seri:", error);
-  //     }
-  //   }
-
-  //   fetchNoSeri();
-  // }, []);
+  const debouncedUpdate = useCallback(
+    debounce((name, value) => {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }, 10),
+    []
+  );
 
   const handleChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value,
-    });
+    const { name, value } = e.target;
+
+    // Update debounced form state
+    debouncedUpdate(name, value);
 
     if (e.target.name === "status_res") {
       setStatusRes(e.target.value);
     }
   };
 
-  async function fetchDataCustomer(id) {
+  const fetchDataCustomer = async (id) => {
     try {
       const fetch_customer = await fetch(
         import.meta.env.VITE_API_URL + `api/nav-data-noseri?id=${id}`
@@ -160,7 +160,7 @@ const AddNoSeri = () => {
       console.error("Error fetching customer:", error);
       return null;
     }
-  }
+  };
 
   const fetchContRes = async (id_cus, value) => {
     const response = await fetch(
@@ -200,11 +200,17 @@ const AddNoSeri = () => {
             formData.no_seri
           );
         }
+
+        setFormData((prev) => ({
+          ...prev,
+          no_cus: customer["d:Sell_to_Customer_No"],
+        }));
       } catch (error) {
         console.error("Error in handleSearch:", error);
       }
 
       setLoading(false);
+      setExpand(false);
     }
   };
 
@@ -212,8 +218,18 @@ const AddNoSeri = () => {
     const now = dayjs();
     const diffInDays = now.diff(dayjs(newDate), "day");
 
-    if (diffInDays > import.meta.env.BACKDATE_DAYS) {
+    if (diffInDays > import.meta.env.VITE_BACKDATE_DAYS) {
       showAlert("Waktu tidak boleh lebih dari 30 hari di belakang!", "error");
+    } else if (
+      diffInDays < import.meta.env.VITE_FORWARD_PENJADWALAN_DAYS &&
+      field == "waktu_dtg"
+    ) {
+      showAlert(
+        "Waktu tidak boleh lebih dari 1 hari di depan! jadwal",
+        "error"
+      );
+    } else if (diffInDays < import.meta.env.VITE_FORWARD_DAYS) {
+      showAlert("Waktu tidak boleh lebih dari 2 hari di depan! date", "error");
     } else {
       if (field == "waktu_selesai" && formData.waktu_mulai) {
         const datang = dayjs(formData.waktu_mulai);
@@ -248,6 +264,14 @@ const AddNoSeri = () => {
     }
   };
 
+  const handleFileSelect = (file) => {
+    setFormData((prev) => ({ ...prev, pic: file }));
+  };
+
+  const handleFileError = (message) => {
+    if (message) showAlert(message, "error");
+  };
+
   const displayValue = (data) => {
     if (typeof data === "string") return data.trim();
     if (typeof data === "object" && "_" in data) return String(data._).trim();
@@ -258,38 +282,44 @@ const AddNoSeri = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    const now = dayjs();
+    const data = new FormData();
+    data.append("pic", formData.pic);
+    data.append("created_by", 1);
+    data.append("type", 2);
+    data.append(
+      "rep_ke",
+      formData.status_res === "CONT" ? formData.rep_ke : null
+    );
+
+    // Append all other fields
+    Object.keys(formData).forEach((key) => {
+      if (!["pic", "created_by", "type", "rep_ke"].includes(key)) {
+        data.append(key, formData[key]);
+      } else if (
+        ["waktu_call", "waktu_dtg", "waktu_mulai", "waktu_selesai"].includes(
+          key
+        )
+      ) {
+        const val = formData[key];
+        data.append(key, val.toISOString());
+      }
+    });
 
     try {
       const response = await fetch(
         import.meta.env.VITE_API_URL + `api/create-flk`,
         {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            ...formData,
-            rep_ke: formData.status_res === "CONT" ? formData.rep_ke : null,
-            waktu_call: formData.waktu_call.toISOString(),
-            waktu_dtg: formData.waktu_dtg.toISOString(),
-            waktu_mulai: formData.waktu_mulai.toISOString(),
-            waktu_selesai: formData.waktu_selesai.toISOString(),
-            no_cus: customer["d:Sell_to_Customer_No"],
-            type: "2",
-            created_by: "1",
-            created_at: now.toISOString(),
-          }),
+          body: data,
         }
       );
 
       const result = await response.json();
 
       if (response.ok) {
-        // Redirect to homepage after successful submission
         navigate("/flk-no-barang", {
           state: {
-            message: "Data Form Laporan Kerja Berhasil Ditambahkan!",
+            message: "Data Laporan Kerja Berhasil Ditambahkan!",
             severity: "success",
           },
         });
@@ -342,7 +372,7 @@ const AddNoSeri = () => {
               <Grid size={12}>
                 <Accordion
                   disabled={!searched || !formData.no_seri}
-                  defaultExpanded
+                  expanded={!expand}
                 >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
@@ -397,7 +427,7 @@ const AddNoSeri = () => {
               <Grid size={12}>
                 <Accordion
                   disabled={!searched || !formData.no_seri}
-                  defaultExpanded
+                  expanded={!expand}
                 >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
@@ -441,7 +471,10 @@ const AddNoSeri = () => {
 
               {/* Accordion 3 */}
               <Grid size={12}>
-                <Accordion disabled={!searched || !formData.no_seri}>
+                <Accordion
+                  disabled={!searched || !formData.no_seri}
+                  expanded={!expand}
+                >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
                     aria-controls="panel1-content"
@@ -589,7 +622,10 @@ const AddNoSeri = () => {
 
               {/* Accordion 4 */}
               <Grid size={12}>
-                <Accordion disabled={!searched || !formData.no_seri}>
+                <Accordion
+                  disabled={!searched || !formData.no_seri}
+                  expanded={!expand}
+                >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
                     aria-controls="panel1-content"
@@ -601,6 +637,23 @@ const AddNoSeri = () => {
                   </AccordionSummary>
                   <AccordionDetails>
                     <Grid container spacing={5}>
+                      <Grid size={{ xs: 12, md: 6 }}>
+                        <Typography
+                          sx={{ color: "rgba(0, 0, 0, 0.6)" }}
+                          id="no_lap"
+                        >
+                          No. Laporan
+                        </Typography>
+                        <TextField
+                          variant="outlined"
+                          fullWidth
+                          value={formData.no_lap}
+                          name="no_lap"
+                          type="number"
+                          onChange={handleChange}
+                        />
+                      </Grid>
+
                       <Grid size={{ xs: 12, md: 6 }}>
                         <Typography
                           sx={{ color: "rgba(0, 0, 0, 0.6)" }}
@@ -780,6 +833,35 @@ const AddNoSeri = () => {
                         </Grid>
                       )}
                     </Grid>
+                  </AccordionDetails>
+                </Accordion>
+              </Grid>
+
+              {/* Accordion 5 - Upload File */}
+              <Grid size={12}>
+                <Accordion
+                  disabled={!searched || !formData.no_seri}
+                  expanded={!expand}
+                >
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreRounded />}
+                    aria-controls="panel1-content"
+                    id="panel1-header"
+                  >
+                    <Typography component="span" variant="h5">
+                      Upload Bukti
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    {/* Upload */}
+                    <Box sx={{ width: "100%", overflowX: "auto" }}>
+                      <Box>
+                        <FileUpload
+                          onFileSelect={handleFileSelect}
+                          onError={handleFileError}
+                        />
+                      </Box>
+                    </Box>
                   </AccordionDetails>
                 </Accordion>
               </Grid>

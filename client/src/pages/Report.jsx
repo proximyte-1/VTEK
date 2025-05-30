@@ -76,6 +76,10 @@ const Report = () => {
       headerName: "No. Report",
     },
     {
+      field: "no_lap",
+      headerName: "No. Laporan",
+    },
+    {
       field: "status_res",
       headerName: "Result",
     },
@@ -97,11 +101,11 @@ const Report = () => {
       },
     },
     {
-      field: "no_rep",
-      headerName: "No Report",
+      field: "no_lap",
+      headerName: "No Laporan",
       flex: 1,
       width: 100,
-      renderCell: (params) => `SPGFGI${params.value}`,
+      renderCell: (params) => `${params.value}`,
     },
     { field: "pelapor", headerName: "Nama Pelapor", flex: 1 },
     {
@@ -390,8 +394,6 @@ const Report = () => {
               },
             }}
             pageSizeOptions={[5]}
-            checkboxSelection
-            disableRowSelectionOnClick
           />
         </Box>
       </Box>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   TextField,
   Button,
@@ -37,6 +37,7 @@ import { useNavigate } from "react-router-dom";
 import { DataGrid } from "@mui/x-data-grid";
 import NumberFormatTextField from "../components/NumberFormatTextField/NumberFormatTextField";
 import FileUpload from "../components/FileUpload/FileUpload";
+import debounce from "lodash.debounce";
 
 const Add = () => {
   const navigate = useNavigate();
@@ -97,18 +98,6 @@ const Add = () => {
     SS: "Software Support",
   };
 
-  const VisuallyHiddenInput = styled("input")({
-    clip: "rect(0 0 0 0)",
-    clipPath: "inset(50%)",
-    height: 1,
-    overflow: "hidden",
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    whiteSpace: "nowrap",
-    width: 1,
-  });
-
   const columns = [
     {
       field: "no",
@@ -142,6 +131,7 @@ const Add = () => {
   const [customer, setDataCustomer] = useState([]);
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [expand, setExpand] = useState(true);
   const [data_no_rep, setDataNoRep] = useState([]);
   const [statusRes, setStatusRes] = useState([]);
   const [alert, setAlert] = useState({
@@ -178,11 +168,21 @@ const Add = () => {
     setAlert((prev) => ({ ...prev, open: false }));
   };
 
+  const debouncedUpdate = useCallback(
+    debounce((name, value) => {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }, 10),
+    []
+  );
+
   const handleChange = (e) => {
-    setFormData((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
+    const { name, value } = e.target;
+
+    // Update debounced form state
+    debouncedUpdate(name, value);
 
     if (e.target.name === "status_res") {
       setStatusRes(e.target.value);
@@ -265,6 +265,7 @@ const Add = () => {
     }
 
     setLoading(false);
+    setExpand(false);
   };
 
   const handleDateChange = (field, newDate) => {
@@ -468,7 +469,7 @@ const Add = () => {
               <Grid size={12}>
                 <Accordion
                   disabled={!searched || !formData.no_rep}
-                  defaultExpanded
+                  expanded={!expand}
                 >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
@@ -523,7 +524,7 @@ const Add = () => {
               <Grid size={12}>
                 <Accordion
                   disabled={!searched || !formData.no_rep}
-                  defaultExpanded
+                  expanded={!expand}
                 >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
@@ -567,7 +568,10 @@ const Add = () => {
 
               {/* Accordion 3 */}
               <Grid size={12}>
-                <Accordion disabled={!searched || !formData.no_rep}>
+                <Accordion
+                  expanded={!expand}
+                  disabled={!searched || !formData.no_rep}
+                >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
                     aria-controls="panel1-content"
@@ -723,7 +727,10 @@ const Add = () => {
 
               {/* Accordion 4 */}
               <Grid size={12}>
-                <Accordion disabled={!searched || !formData.no_rep}>
+                <Accordion
+                  expanded={!expand}
+                  disabled={!searched || !formData.no_rep}
+                >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
                     aria-controls="panel1-content"
@@ -937,7 +944,10 @@ const Add = () => {
 
               {/* Accordion 5 - Table */}
               <Grid size={12}>
-                <Accordion disabled={!searched || !formData.no_rep}>
+                <Accordion
+                  expanded={!expand}
+                  disabled={!searched || !formData.no_rep}
+                >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
                     aria-controls="panel1-content"
@@ -975,7 +985,7 @@ const Add = () => {
               <Grid size={12}>
                 <Accordion
                   disabled={!searched || !formData.no_rep}
-                  defaultExpanded
+                  expanded={!expand}
                 >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
