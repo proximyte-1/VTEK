@@ -16,18 +16,10 @@ import {
   FormControl,
   Alert,
   Snackbar,
-  TableContainer,
-  Table,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableBody,
-  Link,
   CircularProgress,
   InputAdornment,
   Box,
 } from "@mui/material";
-import { styled } from "@mui/material/styles";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
@@ -38,33 +30,54 @@ import { DataGrid } from "@mui/x-data-grid";
 import NumberFormatTextField from "../components/NumberFormatTextField/NumberFormatTextField";
 import FileUpload from "../components/FileUpload/FileUpload";
 import debounce from "lodash.debounce";
+import { useForm, Controller } from "react-hook-form";
+import { yupResolver } from "@hookform/resolvers/yup";
+import * as yup from "yup";
+import axios from "axios";
 
 const Add = () => {
   const navigate = useNavigate();
 
-  const [formData, setFormData] = useState({
-    no_rep: "",
-    no_seri: "",
-    no_lap: "",
-    no_cus: "",
-    no_call: "",
-    pelapor: "",
-    waktu_call: null,
-    waktu_dtg: null,
-    status_call: "",
-    keluhan: "",
-    kat_keluhan: "",
-    problem: "",
-    kat_problem: "",
-    solusi: "",
-    waktu_mulai: null,
-    waktu_selesai: null,
-    count_bw: "",
-    count_cl: "",
-    saran: "",
-    pic: null,
-    status_res: "",
-    rep_ke: 0,
+  const schema = yup.object().shape({
+    no_rep: yup.string().required(),
+    no_call: yup.string().required(),
+    no_lap: yup.string().required(),
+    pelapor: yup.string().required(),
+    waktu_call: yup.date().required(),
+    waktu_dtg: yup.date().required(),
+    status_call: yup.string().required(),
+    keluhan: yup.string().required(),
+    kat_keluhan: yup.string().required(),
+    problem: yup.string().required(),
+    kat_problem: yup.string().required(),
+    solusi: yup.string().required(),
+    waktu_mulai: yup.date().required(),
+    waktu_selesai: yup
+      .date()
+      .min(
+        yup.ref("waktu_mulai"),
+        "Waktu selesai tidak boleh sebelum waktu mulai"
+      ),
+    count_bw: yup.number().required(),
+    count_cl: yup.number().required(),
+    saran: yup.string().required(),
+    status_res: yup.string().required(),
+    pic: yup
+      .mixed()
+      .required("File bukti harus diunggah.")
+      .test(
+        "fileType",
+        "Hanya file gambar (jpg, png, jpeg) yang diperbolehkan.",
+        (value) => {
+          return (
+            value &&
+            ["image/jpeg", "image/png", "image/jpg"].includes(value.type)
+          );
+        }
+      )
+      .test("fileSize", "Ukuran file maksimal 2MB.", (value) => {
+        return value && value.size <= import.meta.env.VITE_MAX_FILE_MB;
+      }),
   });
 
   const selectStatusCall = {
@@ -127,27 +140,67 @@ const Add = () => {
     },
   ];
 
+  const {
+    register,
+    handleSubmit,
+    control,
+    watch,
+    setValue,
+    getValues,
+    formState: { errors },
+  } = useForm({
+    resolver: yupResolver(schema),
+    defaultValues: {
+      no_rep: "",
+      no_call: "",
+      no_lap: "",
+      pelapor: "",
+      waktu_call: null,
+      waktu_dtg: null,
+      status_call: "",
+      keluhan: "",
+      kat_keluhan: "",
+      problem: "",
+      kat_problem: "",
+      solusi: "",
+      waktu_mulai: null,
+      waktu_selesai: null,
+      count_bw: "",
+      count_cl: "",
+      saran: "",
+      status_res: "",
+      rep_ke: 1,
+    },
+  });
+
   const [barang, setDataBarang] = useState([]);
   const [customer, setDataCustomer] = useState([]);
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [expand, setExpand] = useState(true);
   const [data_no_rep, setDataNoRep] = useState([]);
-  const [statusRes, setStatusRes] = useState([]);
+  const [expand, setExpand] = useState(true);
+  const [selectedFile, setSelectedFile] = useState(null);
+
+  let statusRes = watch("status_res");
+  const handleFileSelect = (file) => {
+    setValue("pic", file, { shouldValidate: true });
+  };
+
   const [alert, setAlert] = useState({
     open: false,
     message: "",
-    severity: "success", // 'success', 'error', 'warning', 'info'
+    severity: "success",
   });
+
+  const handleCloseAlert = () => setAlert((prev) => ({ ...prev, open: false }));
 
   useEffect(() => {
     async function fetchNoRep() {
       try {
-        const response = await fetch(
-          import.meta.env.VITE_API_URL + `api/get-no-rep`
+        const response = await axios.get(
+          `${import.meta.env.VITE_API_URL}api/get-no-rep`
         );
-        const data = await response.json();
-        setDataNoRep(data); // <-- set the array into state
+        setDataNoRep(response.data);
       } catch (error) {
         console.error("Error fetching No Report:", error);
       }
@@ -156,85 +209,77 @@ const Add = () => {
     fetchNoRep();
   }, []);
 
-  const showAlert = (message, severity) => {
-    setAlert({
-      open: true,
-      message,
-      severity,
-    });
-  };
-
-  const handleCloseAlert = () => {
-    setAlert((prev) => ({ ...prev, open: false }));
-  };
-
-  const debouncedUpdate = useCallback(
-    debounce((name, value) => {
-      setFormData((prev) => ({
-        ...prev,
-        [name]: value,
-      }));
-    }, 10),
-    []
-  );
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-
-    // Update debounced form state
-    debouncedUpdate(name, value);
-
-    if (e.target.name === "status_res") {
-      setStatusRes(e.target.value);
-    }
-  };
-
   const fetchDataBarang = async (id) => {
     try {
-      const fetch_barang = await fetch(
-        import.meta.env.VITE_API_URL + `api/nav-data?id=${id}`
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}api/nav-data?id=${id}`
       );
-      const data = await fetch_barang.json();
-      const customerData = data[0];
+      const data = response.data;
 
       if (data.length <= 0) {
-        showAlert("Nomor Report Belum Ada Pada Navision !", "error");
+        setAlert({
+          open: true,
+          message: "Nomor Report Belum Ada Pada Navision!",
+          severity: "error",
+        });
         setSearched(false);
         return null;
-      } else {
-        showAlert("Nomor Report Belum Dipakai.", "success");
-        setSearched(true);
-        setDataBarang(data);
-        setDataCustomer(customerData);
-        setFormData((prev) => ({
-          ...prev,
-          no_seri: customerData["d:Serial_No"],
-          no_cus: customerData["d:Sell_to_Customer_No"],
-        }));
-        return customerData;
       }
+
+      const customerData = data[0];
+
+      setAlert({
+        open: true,
+        message: "Nomor Report Belum Dipakai.",
+        severity: "success",
+      });
+      setSearched(true);
+      setDataBarang(data);
+      setDataCustomer(customerData);
+
+      // Update form values using react-hook-form's setValue
+      setValue("no_seri", customerData["d:Serial_No"]);
+      setValue("no_cus", customerData["d:Sell_to_Customer_No"]);
+
+      return customerData;
     } catch (error) {
       console.error("Error fetching barang:", error);
+      setAlert({
+        open: true,
+        message: "Gagal mengambil data dari server",
+        severity: "error",
+      });
+      setSearched(false);
     }
   };
 
-  const fetchContRes = async (id_cus, value) => {
-    const response = await fetch(
-      import.meta.env.VITE_API_URL +
-        `api/get-rep-seri-by-cus?id_cus=${id_cus}&value=${value}`
-    );
-    const data = await response.json();
+  const fetchContRes = async (id_cus, serialNo) => {
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}api/get-rep-seri-by-cus`,
+        {
+          params: {
+            id_cus: id_cus,
+            value: serialNo,
+          },
+        }
+      );
 
-    if (data.length <= 0) {
-      return;
-    }
+      const data = response.data;
 
-    const incre = data[0]["rep_ke"] + 1;
+      if (data.length <= 0) return;
 
-    if (data[0]["status_res"] === "CONT") {
-      setFormData({
-        ...formData,
-        rep_ke: incre,
+      const increment = data[0]["rep_ke"] + 1;
+
+      if (data[0]["status_res"] === "CONT") {
+        setValue("rep_ke", increment);
+      }
+    } catch (error) {
+      console.error("Error fetching continuation status:", error);
+      setAlert({
+        open: true,
+        message: "Gagal mengambil status report sebelumnya",
+        severity: "error",
       });
     }
   };
@@ -242,88 +287,52 @@ const Add = () => {
   const handleSearch = async () => {
     setLoading(true);
 
-    if (!formData.no_rep) {
-      showAlert("Nomor Report Tidak Diperbolehkan Kosong.", "error");
-      setSearched(false);
-      setLoading(false);
-      return;
-    }
+    const noRep = getValues("no_rep");
 
-    if (data_no_rep.some((item) => item.no_rep === formData.no_rep)) {
-      showAlert("Nomor Report Sudah Pernah Dipakai.", "error");
-      setSearched(false);
-      setLoading(false);
-      return;
-    }
-
-    const fetchedCustomer = await fetchDataBarang(formData.no_rep);
-    if (fetchedCustomer) {
-      fetchContRes(
-        fetchedCustomer["d:Sell_to_Customer_No"],
-        fetchedCustomer["d:Serial_No"]
-      );
-    }
-
-    setLoading(false);
-    setExpand(false);
-  };
-
-  const handleDateChange = (field, newDate) => {
-    const now = dayjs();
-    const diffInDays = now.diff(dayjs(newDate), "day");
-
-    if (diffInDays > import.meta.env.VITE_BACKDATE_DAYS) {
-      showAlert("Waktu tidak boleh lebih dari 30 hari di belakang!", "error");
-    } else if (
-      diffInDays < import.meta.env.VITE_FORWARD_PENJADWALAN_DAYS &&
-      field == "waktu_dtg"
-    ) {
-      showAlert(
-        "Waktu tidak boleh lebih dari 1 hari di depan! jadwal",
-        "error"
-      );
-    } else if (diffInDays < import.meta.env.VITE_FORWARD_DAYS) {
-      showAlert("Waktu tidak boleh lebih dari 2 hari di depan! date", "error");
-    } else {
-      if (field == "waktu_selesai" && formData.waktu_mulai) {
-        const datang = dayjs(formData.waktu_mulai);
-        const selesai = dayjs(newDate);
-
-        if (selesai.isBefore(datang)) {
-          showAlert(
-            "Waktu selesai tidak boleh lebih awal dari waktu mulai.",
-            "error"
-          );
-          return;
-        }
-      }
-
-      if (field == "waktu_dtg" && formData.waktu_call) {
-        const call = dayjs(formData.waktu_call);
-        const dtg = dayjs(newDate);
-
-        if (dtg.isBefore(call)) {
-          showAlert(
-            "Waktu Penjadwalan tidak boleh lebih awal dari waktu call.",
-            "error"
-          );
-          return;
-        }
-      }
-
-      setFormData({
-        ...formData,
-        [field]: newDate,
+    if (!noRep) {
+      setAlert({
+        open: true,
+        message: "Nomor Report Tidak Boleh Kosong.",
+        severity: "error",
       });
+      setSearched(false);
+      setLoading(false);
+      return;
     }
-  };
 
-  const handleFileSelect = (file) => {
-    setFormData((prev) => ({ ...prev, pic: file }));
-  };
+    // Check if no_rep is already used
+    if (data_no_rep.some((item) => item.no_rep === noRep)) {
+      setAlert({
+        open: true,
+        message: "Nomor Report Sudah Pernah Dipakai.",
+        severity: "error",
+      });
+      setSearched(false);
+      setLoading(false);
+      return;
+    }
 
-  const handleFileError = (message) => {
-    if (message) showAlert(message, "error");
+    try {
+      // Fetch customer data
+      const customer = await fetchDataBarang(noRep);
+      if (customer) {
+        await fetchContRes(
+          customer["d:Sell_to_Customer_No"],
+          customer["d:Serial_No"]
+        );
+      }
+
+      setExpand(false);
+      setLoading(false);
+    } catch (error) {
+      console.error("Error in handleSearch:", error);
+      setAlert({
+        open: true,
+        message: "Terjadi kesalahan saat mencari data.",
+        severity: "error",
+      });
+      setLoading(false);
+    }
   };
 
   const displayValue = (data) => {
@@ -348,76 +357,86 @@ const Add = () => {
     return data;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    const data = new FormData();
-    data.append("pic", formData.pic);
-    data.append("created_by", 1);
-    data.append("type", 1);
-    data.append(
-      "rep_ke",
-      formData.status_res === "CONT" ? formData.rep_ke : null
-    );
-
-    // Append all other fields
-    Object.keys(formData).forEach((key) => {
-      if (!["pic", "created_by", "type", "rep_ke"].includes(key)) {
-        data.append(key, formData[key]);
-      } else if (
-        ["waktu_call", "waktu_dtg", "waktu_mulai", "waktu_selesai"].includes(
-          key
-        )
-      ) {
-        const val = formData[key];
-        data.append(key, val.toISOString());
-      }
-    });
+  const submit = async (values) => {
+    console.log("test");
+    if (!selectedFile) {
+      setAlert({
+        open: true,
+        message: "File bukti harus diunggah.",
+        severity: "error",
+      });
+      return;
+    }
 
     try {
-      const response = await fetch(
-        import.meta.env.VITE_API_URL + `api/create-flk`,
-        {
-          method: "POST",
-          body: data,
+      const data = new FormData();
+
+      // Always append the file
+      data.append("pic", selectedFile);
+      data.append("created_by", 1);
+      data.append("type", 1);
+
+      // Append all fields except special ones
+      Object.entries(values).forEach(([key, value]) => {
+        if (
+          ["waktu_call", "waktu_dtg", "waktu_mulai", "waktu_selesai"].includes(
+            key
+          ) &&
+          value instanceof Date
+        ) {
+          data.append(key, value.toISOString());
+        } else if (key === "rep_ke" && values.status_res !== "CONT") {
+          data.append(key, "");
+        } else {
+          data.append(key, value);
         }
+      });
+
+      // Submit main form
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}api/create-flk`,
+        data
+      );
+      const { data: result } = response;
+
+      if (!response.data || !result.data?.id) {
+        throw new Error("Gagal menyimpan data utama.");
+      }
+
+      const reportId = result.data.id;
+
+      // Submit barang list
+      const barangPayload = {
+        no_lk: reportId,
+        items: submitBarang(), // Assuming submitBarang() returns array of items
+      };
+
+      const barangResponse = await axios.post(
+        `${import.meta.env.VITE_API_URL}api/create-brg`,
+        barangPayload
       );
 
-      const result = await response.json();
-
-      if (response.ok) {
-        const id = result.data.id;
-        // After success, post the barang list
-        const barangResponse = await fetch(
-          import.meta.env.VITE_API_URL + `api/create-brg`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              no_lk: id, // or another foreign key
-              items: submitBarang(),
-            }),
-          }
-        );
-        const barangResult = await barangResponse.json();
-
-        if (barangResult.ok) {
-          // Redirect to homepage after successful submission
-          navigate("/flk", {
-            state: {
-              message: "Data Laporan Kerja Berhasil Ditambahkan!",
-              severity: "success",
-            },
-          });
-        } else {
-          showAlert("Add Data Barang Failed !!", "error");
-        }
+      if (barangResponse.status === 200) {
+        navigate("/flk", {
+          state: {
+            message: "Data Laporan Kerja Berhasil Ditambahkan!",
+            severity: "success",
+          },
+        });
       } else {
-        showAlert("Failed to submit data!", "error");
+        setAlert({
+          open: true,
+          message: "Add Data Barang Failed !!",
+          severity: "error",
+        });
       }
     } catch (error) {
       console.error("Error submitting data:", error);
-      showAlert("Something went wrong!", "error");
+      setAlert({
+        open: true,
+        message: "Terjadi kesalahan saat mengirim data.",
+        severity: "error",
+      });
     }
   };
 
@@ -428,21 +447,21 @@ const Add = () => {
   return (
     <Paper sx={{ padding: 3 }} elevation={4}>
       <Typography variant="h5" marginBottom={"1.5em"} gutterBottom>
-        New Form Laporan Kerja
+        New Laporan Kerja
       </Typography>
       <LocalizationProvider dateAdapter={AdapterDateFns}>
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit(submit)} encType="multipart/form-data">
           <Grid container spacing={5} marginY={"2em"} alignItems="center">
             {/* Input Report */}
             <Grid size={{ xs: 12, md: 6 }}>
               <TextField
                 label="No. Report / No. Navision"
-                variant="outlined"
                 fullWidth
-                value={formData.no_rep}
-                name="no_rep"
+                {...register("no_rep")}
+                error={!!errors.no_rep}
+                helperText={errors.no_rep?.message}
+                variant="outlined"
                 type="number"
-                onChange={handleChange}
                 slotProps={{
                   input: {
                     startAdornment: (
@@ -468,7 +487,7 @@ const Add = () => {
               {/* Accordion 1 - Non Input */}
               <Grid size={12}>
                 <Accordion
-                  disabled={!searched || !formData.no_rep}
+                  disabled={!searched || !getValues("no_rep")}
                   expanded={!expand}
                 >
                   <AccordionSummary
@@ -523,7 +542,7 @@ const Add = () => {
               {/* Accordion 2 - Non Input */}
               <Grid size={12}>
                 <Accordion
-                  disabled={!searched || !formData.no_rep}
+                  disabled={!searched || !getValues("no_rep")}
                   expanded={!expand}
                 >
                   <AccordionSummary
@@ -570,7 +589,7 @@ const Add = () => {
               <Grid size={12}>
                 <Accordion
                   expanded={!expand}
-                  disabled={!searched || !formData.no_rep}
+                  disabled={!searched || !getValues("no_rep")}
                 >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
@@ -593,9 +612,9 @@ const Add = () => {
                         <TextField
                           variant="outlined"
                           fullWidth
-                          value={formData.no_call}
-                          name="no_call"
-                          onChange={handleChange}
+                          {...register("no_call")}
+                          error={!!errors.no_call}
+                          helperText={errors.no_call?.message}
                           type="number"
                           slotProps={{
                             input: {
@@ -619,35 +638,103 @@ const Add = () => {
                         <TextField
                           variant="outlined"
                           fullWidth
-                          value={formData.pelapor}
-                          name="pelapor"
-                          onChange={handleChange}
+                          {...register("pelapor")}
+                          error={!!errors.pelapor}
+                          helperText={errors.pelapor?.message}
                         />
                       </Grid>
                       <Grid size={{ xs: 12, md: 6 }}>
                         <InputLabel id="waktu_call">Waktu Call</InputLabel>
-                        <DateTimePicker
-                          labelId="waktu_call"
-                          value={formData.waktu_call}
-                          slotProps={{ textField: { fullWidth: true } }}
-                          onChange={(newValue) =>
-                            handleDateChange("waktu_call", newValue)
-                          }
-                          ampm={false}
+                        <Controller
+                          name="waktu_call"
+                          control={control}
+                          render={({ field }) => (
+                            <DateTimePicker
+                              ampm={false}
+                              {...field}
+                              slotProps={{
+                                textField: {
+                                  fullWidth: true,
+                                  error: !!errors.waktu_call,
+                                  helperText: errors.waktu_call?.message,
+                                },
+                              }}
+                            />
+                          )}
                         />
                       </Grid>
                       <Grid size={{ xs: 12, md: 6 }}>
                         <InputLabel id="waktu_dtg">
                           Waktu Penjadwalan
                         </InputLabel>
-                        <DateTimePicker
-                          labelId="waktu_dtg"
-                          value={formData.waktu_dtg}
-                          slotProps={{ textField: { fullWidth: true } }}
-                          onChange={(newValue) =>
-                            handleDateChange("waktu_dtg", newValue)
-                          }
-                          ampm={false}
+                        <Controller
+                          name="waktu_dtg"
+                          control={control}
+                          render={({ field }) => (
+                            <DateTimePicker
+                              ampm={false}
+                              {...field}
+                              onChange={(newValue) => {
+                                const now = dayjs();
+                                const diffInDays = now.diff(
+                                  dayjs(newValue),
+                                  "day"
+                                );
+                                const callTime = watch("waktu_call");
+
+                                if (
+                                  diffInDays <
+                                  import.meta.env.VITE_FORWARD_PENJADWALAN_DAYS
+                                ) {
+                                  setAlert({
+                                    open: true,
+                                    message: `Waktu tidak boleh lebih dari ${
+                                      import.meta.env
+                                        .VITE_FORWARD_PENJADWALAN_DAYS
+                                    } hari ke depan.`,
+                                    severity: "error",
+                                  });
+                                  return;
+                                }
+
+                                if (
+                                  diffInDays >
+                                  import.meta.env.VITE_BACKDATE_DAYS
+                                ) {
+                                  setAlert({
+                                    open: true,
+                                    message: `Waktu tidak boleh lebih dari ${
+                                      import.meta.env.VITE_BACKDATE_DAYS
+                                    } hari ke belakang.`,
+                                    severity: "error",
+                                  });
+                                  return;
+                                }
+
+                                if (
+                                  callTime &&
+                                  dayjs(newValue).isBefore(dayjs(callTime))
+                                ) {
+                                  setAlert({
+                                    open: true,
+                                    message:
+                                      "Waktu Penjadwalan tidak boleh sebelum Waktu Call.",
+                                    severity: "error",
+                                  });
+                                  return;
+                                }
+
+                                field.onChange(newValue); // still update the form
+                              }}
+                              slotProps={{
+                                textField: {
+                                  fullWidth: true,
+                                  error: !!errors.waktu_dtg,
+                                  helperText: errors.waktu_dtg?.message,
+                                },
+                              }}
+                            />
+                          )}
                         />
                       </Grid>
                       <Grid size={{ xs: 12, md: 6 }}>
@@ -655,30 +742,24 @@ const Add = () => {
                           <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
                             Status Call
                           </Typography>
-                          <Select
+                          <Controller
                             name="status_call"
-                            value={formData.status_call}
-                            onChange={handleChange}
-                            variant="outlined"
-                            // displayEmpty
-                            // renderValue={(selected) => {
-                            //   if (selected.length === 0) {
-                            //     return <em>Pilih Kategori Status Call</em>;
-                            //   }
-
-                            //   return selected. ;
-                            // }}
-                          >
-                            <MenuItem disabled value="">
-                              <em>Pilih Kategori Status Call</em>
-                            </MenuItem>
-                            {Object.keys(selectStatusCall).map((key) => (
-                              <MenuItem value={key} key={key}>
-                                {displayValue(key)} -{" "}
-                                {displayValue(selectStatusCall[key])}
-                              </MenuItem>
-                            ))}
-                          </Select>
+                            control={control}
+                            render={({ field }) => (
+                              <Select {...field} variant="outlined">
+                                <MenuItem disabled value="">
+                                  <em>Pilih Kategori Status Call</em>
+                                </MenuItem>
+                                {Object.entries(selectStatusCall).map(
+                                  ([value, label]) => (
+                                    <MenuItem key={value} value={value}>
+                                      {label}
+                                    </MenuItem>
+                                  )
+                                )}
+                              </Select>
+                            )}
+                          />
                         </FormControl>
                       </Grid>
                       <Grid size={{ xs: 12, md: 6 }}>
@@ -691,11 +772,11 @@ const Add = () => {
                         <TextField
                           variant="outlined"
                           fullWidth
-                          value={formData.keluhan}
-                          name="keluhan"
                           multiline
                           rows={3}
-                          onChange={handleChange}
+                          {...register("keluhan")}
+                          error={!!errors.keluhan}
+                          helperText={errors.keluhan?.message}
                         />
                       </Grid>
                       <Grid size={{ xs: 12, md: 6 }}>
@@ -703,21 +784,25 @@ const Add = () => {
                           <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
                             Kategori Keluhan
                           </Typography>
-                          <Select
+                          <Controller
                             name="kat_keluhan"
-                            value={formData.kat_keluhan}
-                            onChange={handleChange}
+                            control={control}
                             variant="outlined"
-                          >
-                            <MenuItem disabled value="">
-                              <em>Pilih Kategori Keluhan</em>
-                            </MenuItem>
-                            {Object.keys(selectKeluhan).map((key) => (
-                              <MenuItem value={key} key={key}>
-                                {displayValue(selectKeluhan[key])}
-                              </MenuItem>
-                            ))}
-                          </Select>
+                            render={({ field }) => (
+                              <Select {...field}>
+                                <MenuItem disabled value="">
+                                  <em>Pilih Kategori Keluhan</em>
+                                </MenuItem>
+                                {Object.entries(selectKeluhan).map(
+                                  ([value, label]) => (
+                                    <MenuItem key={value} value={value}>
+                                      {label}
+                                    </MenuItem>
+                                  )
+                                )}
+                              </Select>
+                            )}
+                          />
                         </FormControl>
                       </Grid>
                     </Grid>
@@ -729,7 +814,7 @@ const Add = () => {
               <Grid size={12}>
                 <Accordion
                   expanded={!expand}
-                  disabled={!searched || !formData.no_rep}
+                  disabled={!searched || !getValues("no_rep")}
                 >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
@@ -752,10 +837,11 @@ const Add = () => {
                         <TextField
                           variant="outlined"
                           fullWidth
-                          value={formData.no_lap}
-                          name="no_lap"
-                          type="number"
-                          onChange={handleChange}
+                          multiline
+                          rows={3}
+                          {...register("no_lap")}
+                          error={!!errors.no_lap}
+                          helperText={errors.no_lap?.message}
                         />
                       </Grid>
 
@@ -769,11 +855,11 @@ const Add = () => {
                         <TextField
                           variant="outlined"
                           fullWidth
-                          value={formData.problem}
-                          name="problem"
                           multiline
                           rows={3}
-                          onChange={handleChange}
+                          {...register("problem")}
+                          error={!!errors.problem}
+                          helperText={errors.problem?.message}
                         />
                       </Grid>
 
@@ -782,21 +868,25 @@ const Add = () => {
                           <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
                             Kategori Problem
                           </Typography>
-                          <Select
+                          <Controller
                             name="kat_problem"
-                            value={formData.kat_problem}
-                            onChange={handleChange}
+                            control={control}
                             variant="outlined"
-                          >
-                            <MenuItem disabled value="">
-                              <em>Pilih Kategori Problem</em>
-                            </MenuItem>
-                            {Object.keys(selectProblem).map((key) => (
-                              <MenuItem value={key} key={key}>
-                                {displayValue(selectProblem[key])}
-                              </MenuItem>
-                            ))}
-                          </Select>
+                            render={({ field }) => (
+                              <Select {...field}>
+                                <MenuItem disabled value="">
+                                  <em>Pilih Kategori Problem</em>
+                                </MenuItem>
+                                {Object.entries(selectProblem).map(
+                                  ([value, label]) => (
+                                    <MenuItem key={value} value={value}>
+                                      {label}
+                                    </MenuItem>
+                                  )
+                                )}
+                              </Select>
+                            )}
+                          />
                         </FormControl>
                       </Grid>
 
@@ -810,24 +900,32 @@ const Add = () => {
                         <TextField
                           variant="outlined"
                           fullWidth
-                          value={formData.solusi}
-                          name="solusi"
                           multiline
                           rows={3}
-                          onChange={handleChange}
+                          {...register("solusi")}
+                          error={!!errors.solusi}
+                          helperText={errors.solusi?.message}
                         />
                       </Grid>
 
                       <Grid size={{ xs: 12, md: 6 }}>
                         <InputLabel id="waktu_mulai">Waktu Mulai</InputLabel>
-                        <DateTimePicker
-                          labelId="waktu_mulai"
-                          value={formData.waktu_mulai}
-                          slotProps={{ textField: { fullWidth: true } }}
-                          onChange={(newValue) =>
-                            handleDateChange("waktu_mulai", newValue)
-                          }
-                          ampm={false}
+                        <Controller
+                          name="waktu_mulai"
+                          control={control}
+                          render={({ field }) => (
+                            <DateTimePicker
+                              ampm={false}
+                              {...field}
+                              slotProps={{
+                                textField: {
+                                  fullWidth: true,
+                                  error: !!errors.waktu_mulai,
+                                  helperText: errors.waktu_mulai?.message,
+                                },
+                              }}
+                            />
+                          )}
                         />
                       </Grid>
 
@@ -835,14 +933,72 @@ const Add = () => {
                         <InputLabel id="waktu_selesai">
                           Waktu Selesai
                         </InputLabel>
-                        <DateTimePicker
-                          labelId="waktu_selesai"
-                          value={formData.waktu_selesai}
-                          slotProps={{ textField: { fullWidth: true } }}
-                          onChange={(newValue) =>
-                            handleDateChange("waktu_selesai", newValue)
-                          }
-                          ampm={false}
+                        <Controller
+                          name="waktu_selesai"
+                          control={control}
+                          render={({ field }) => (
+                            <DateTimePicker
+                              ampm={false}
+                              {...field}
+                              onChange={(newValue) => {
+                                const now = dayjs();
+                                const diffInDays = now.diff(
+                                  dayjs(newValue),
+                                  "day"
+                                );
+                                const mulaiTime = watch("waktu_mulai");
+
+                                if (
+                                  diffInDays < import.meta.env.VITE_FORWARD_DAYS
+                                ) {
+                                  setAlert({
+                                    open: true,
+                                    message: `Waktu tidak boleh lebih dari ${
+                                      import.meta.env.VITE_FORWARD_DAYS
+                                    } hari ke depan.`,
+                                    severity: "error",
+                                  });
+                                  return;
+                                }
+
+                                if (
+                                  diffInDays >
+                                  import.meta.env.VITE_BACKDATE_DAYS
+                                ) {
+                                  setAlert({
+                                    open: true,
+                                    message: `Waktu tidak boleh lebih dari ${
+                                      import.meta.env.VITE_BACKDATE_DAYS
+                                    } hari ke belakang.`,
+                                    severity: "error",
+                                  });
+                                  return;
+                                }
+
+                                if (
+                                  mulaiTime &&
+                                  dayjs(newValue).isBefore(dayjs(mulaiTime))
+                                ) {
+                                  setAlert({
+                                    open: true,
+                                    message:
+                                      "Waktu Selesai tidak boleh sebelum Waktu Mulai.",
+                                    severity: "error",
+                                  });
+                                  return;
+                                }
+
+                                field.onChange(newValue); // still update the form
+                              }}
+                              slotProps={{
+                                textField: {
+                                  fullWidth: true,
+                                  error: !!errors.waktu_selesai,
+                                  helperText: errors.waktu_selesai?.message,
+                                },
+                              }}
+                            />
+                          )}
                         />
                       </Grid>
 
@@ -854,11 +1010,11 @@ const Add = () => {
                           Counter B/W
                         </Typography>
                         <NumberFormatTextField
-                          label=""
-                          name="count_bw"
-                          value={formData.count_bw}
-                          onChange={handleChange}
+                          variant="outlined"
                           fullWidth
+                          {...register("count_bw")}
+                          error={!!errors.count_bw}
+                          helperText={errors.count_bw?.message}
                         />
                       </Grid>
 
@@ -867,14 +1023,14 @@ const Add = () => {
                           sx={{ color: "rgba(0, 0, 0, 0.6)" }}
                           id="count_cl"
                         >
-                          Counter CL
+                          Counter C/L
                         </Typography>
                         <NumberFormatTextField
-                          label=""
-                          name="count_cl"
-                          value={formData.count_cl}
-                          onChange={handleChange}
+                          variant="outlined"
                           fullWidth
+                          {...register("count_cl")}
+                          error={!!errors.count_cl}
+                          helperText={errors.count_cl?.message}
                         />
                       </Grid>
 
@@ -888,11 +1044,11 @@ const Add = () => {
                         <TextField
                           variant="outlined"
                           fullWidth
-                          value={formData.saran}
-                          name="saran"
                           multiline
                           rows={3}
-                          onChange={handleChange}
+                          {...register("saran")}
+                          error={!!errors.saran}
+                          helperText={errors.saran?.message}
                         />
                       </Grid>
 
@@ -901,21 +1057,24 @@ const Add = () => {
                           <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
                             Status Result
                           </Typography>
-                          <Select
+                          <Controller
                             name="status_res"
-                            value={formData.status_res}
-                            onChange={handleChange}
-                            variant="outlined"
-                          >
-                            <MenuItem disabled value="">
-                              <em>Pilih Status Result</em>
-                            </MenuItem>
-                            {Object.keys(selectStatusResult).map((key) => (
-                              <MenuItem value={key} key={key}>
-                                {displayValue(selectStatusResult[key])}
-                              </MenuItem>
-                            ))}
-                          </Select>
+                            control={control}
+                            render={({ field }) => (
+                              <Select {...field} variant="outlined">
+                                <MenuItem disabled value="">
+                                  <em>Pilih Status Result</em>
+                                </MenuItem>
+                                {Object.entries(selectStatusResult).map(
+                                  ([value, label]) => (
+                                    <MenuItem key={value} value={value}>
+                                      {label}
+                                    </MenuItem>
+                                  )
+                                )}
+                              </Select>
+                            )}
+                          />
                         </FormControl>
                       </Grid>
 
@@ -930,10 +1089,8 @@ const Add = () => {
                           <TextField
                             variant="outlined"
                             fullWidth
-                            value={formData.rep_ke}
-                            name="rep_ke"
-                            disabled
-                            onChange={handleChange}
+                            {...register("rep_ke")}
+                            aria-readonly
                           />
                         </Grid>
                       )}
@@ -946,7 +1103,7 @@ const Add = () => {
               <Grid size={12}>
                 <Accordion
                   expanded={!expand}
-                  disabled={!searched || !formData.no_rep}
+                  disabled={!searched || !getValues("no_rep")}
                 >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
@@ -984,7 +1141,7 @@ const Add = () => {
               {/* Accordion 6 - Upload File */}
               <Grid size={12}>
                 <Accordion
-                  disabled={!searched || !formData.no_rep}
+                  disabled={!searched || !getValues("no_rep")}
                   expanded={!expand}
                 >
                   <AccordionSummary
@@ -1002,7 +1159,15 @@ const Add = () => {
                       <Box>
                         <FileUpload
                           onFileSelect={handleFileSelect}
-                          onError={handleFileError}
+                          onError={(msg) =>
+                            msg
+                              ? setAlert({
+                                  open: true,
+                                  message: msg,
+                                  severity: "error",
+                                })
+                              : null
+                          }
                         />
                       </Box>
                     </Box>
@@ -1037,7 +1202,7 @@ const Add = () => {
                 type="submit"
                 variant="contained"
                 color="primary"
-                disabled={!searched || !formData.no_rep}
+                disabled={!searched || !getValues("no_rep")}
                 sx={{ width: isSmallScreen ? "100%" : "auto" }}
               >
                 Submit

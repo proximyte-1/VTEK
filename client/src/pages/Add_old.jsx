@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   TextField,
   Button,
@@ -16,18 +16,10 @@ import {
   FormControl,
   Alert,
   Snackbar,
-  TableContainer,
-  Table,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableBody,
-  Link,
   CircularProgress,
   InputAdornment,
   Box,
 } from "@mui/material";
-import { styled } from "@mui/material/styles";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
@@ -37,6 +29,10 @@ import { useNavigate } from "react-router-dom";
 import { DataGrid } from "@mui/x-data-grid";
 import NumberFormatTextField from "../components/NumberFormatTextField/NumberFormatTextField";
 import FileUpload from "../components/FileUpload/FileUpload";
+import debounce from "lodash.debounce";
+import { useForm, Controller } from "react-hook-form";
+import { yupResolver } from "@hookform/resolvers/yup";
+import * as yup from "yup";
 
 const Add = () => {
   const navigate = useNavigate();
@@ -64,6 +60,17 @@ const Add = () => {
     pic: null,
     status_res: "",
     rep_ke: 0,
+  });
+
+  const schema = yup.object().shape({
+    no_rep: yup.string().required("No. Report is required"),
+    no_call: yup.string().required("No. Pelapor is required"),
+    pelapor: yup.string().required("Nama Pelapor is required"),
+    waktu_call: yup.date().required("Waktu Call is required"),
+    waktu_dtg: yup.date().required("Waktu Penjadwalan is required"),
+    status_call: yup.string().required("Status Call is required"),
+    keluhan: yup.string().required("Keluhan is required"),
+    kat_keluhan: yup.string().required("Kategori Keluhan is required"),
   });
 
   const selectStatusCall = {
@@ -96,18 +103,6 @@ const Add = () => {
     TS: "Technical Support",
     SS: "Software Support",
   };
-
-  const VisuallyHiddenInput = styled("input")({
-    clip: "rect(0 0 0 0)",
-    clipPath: "inset(50%)",
-    height: 1,
-    overflow: "hidden",
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    whiteSpace: "nowrap",
-    width: 1,
-  });
 
   const columns = [
     {
@@ -142,6 +137,7 @@ const Add = () => {
   const [customer, setDataCustomer] = useState([]);
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [expand, setExpand] = useState(true);
   const [data_no_rep, setDataNoRep] = useState([]);
   const [statusRes, setStatusRes] = useState([]);
   const [alert, setAlert] = useState({
@@ -178,11 +174,21 @@ const Add = () => {
     setAlert((prev) => ({ ...prev, open: false }));
   };
 
+  const debouncedUpdate = useCallback(
+    debounce((name, value) => {
+      setFormData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }, 10),
+    []
+  );
+
   const handleChange = (e) => {
-    setFormData((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
+    const { name, value } = e.target;
+
+    // Update debounced form state
+    debouncedUpdate(name, value);
 
     if (e.target.name === "status_res") {
       setStatusRes(e.target.value);
@@ -265,6 +271,7 @@ const Add = () => {
     }
 
     setLoading(false);
+    setExpand(false);
   };
 
   const handleDateChange = (field, newDate) => {
@@ -468,7 +475,7 @@ const Add = () => {
               <Grid size={12}>
                 <Accordion
                   disabled={!searched || !formData.no_rep}
-                  defaultExpanded
+                  expanded={!expand}
                 >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
@@ -523,7 +530,7 @@ const Add = () => {
               <Grid size={12}>
                 <Accordion
                   disabled={!searched || !formData.no_rep}
-                  defaultExpanded
+                  expanded={!expand}
                 >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
@@ -567,7 +574,10 @@ const Add = () => {
 
               {/* Accordion 3 */}
               <Grid size={12}>
-                <Accordion disabled={!searched || !formData.no_rep}>
+                <Accordion
+                  expanded={!expand}
+                  disabled={!searched || !formData.no_rep}
+                >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
                     aria-controls="panel1-content"
@@ -723,7 +733,10 @@ const Add = () => {
 
               {/* Accordion 4 */}
               <Grid size={12}>
-                <Accordion disabled={!searched || !formData.no_rep}>
+                <Accordion
+                  expanded={!expand}
+                  disabled={!searched || !formData.no_rep}
+                >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
                     aria-controls="panel1-content"
@@ -937,7 +950,10 @@ const Add = () => {
 
               {/* Accordion 5 - Table */}
               <Grid size={12}>
-                <Accordion disabled={!searched || !formData.no_rep}>
+                <Accordion
+                  expanded={!expand}
+                  disabled={!searched || !formData.no_rep}
+                >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
                     aria-controls="panel1-content"
@@ -975,7 +991,7 @@ const Add = () => {
               <Grid size={12}>
                 <Accordion
                   disabled={!searched || !formData.no_rep}
-                  defaultExpanded
+                  expanded={!expand}
                 >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
