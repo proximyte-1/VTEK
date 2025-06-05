@@ -16,13 +16,6 @@ import {
   FormControl,
   Alert,
   Snackbar,
-  TableContainer,
-  Table,
-  TableHead,
-  TableRow,
-  TableCell,
-  TableBody,
-  Link,
   CircularProgress,
   InputAdornment,
   Box,
@@ -38,146 +31,96 @@ import { DataGrid } from "@mui/x-data-grid";
 import NumberFormatTextField from "../components/NumberFormatTextField/NumberFormatTextField";
 import debounce from "lodash.debounce";
 import FileUpload from "../components/FileUpload/FileUpload";
+import { useAlert } from "../utils/alert";
+import axios from "axios";
+import { Controller, useForm } from "react-hook-form";
+import { yupResolver } from "@hookform/resolvers/yup";
+import { columnsBarang, displayValue, schemaNoRep } from "../utils/helpers";
+import {
+  selectKeluhan,
+  selectProblem,
+  selectStatusCall,
+  selectStatusResult,
+} from "../utils/constants";
 
 const Edit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const [formData, setFormData] = useState({
-    no_rep: "",
-    no_cus: "",
-    no_lap: "",
-    no_call: "",
-    pelapor: "",
-    waktu_call: null,
-    waktu_dtg: null,
-    status_call: "",
-    keluhan: "",
-    kat_keluhan: "",
-    problem: "",
-    kat_problem: "",
-    solusi: "",
-    waktu_mulai: null,
-    waktu_selesai: null,
-    count_bw: "",
-    count_cl: "",
-    saran: "",
-    pic: null,
-    status_res: "",
-    rep_ke: "",
+  const {
+    register,
+    handleSubmit,
+    control,
+    watch,
+    setValue,
+    getValues,
+    reset,
+    formState: { errors },
+  } = useForm({
+    resolver: yupResolver(schemaNoRep),
+    context: { isEdit: true },
+    defaultValues: {
+      no_rep: "",
+      no_call: "",
+      no_lap: "",
+      pelapor: "",
+      waktu_call: null,
+      waktu_dtg: null,
+      status_call: "",
+      keluhan: "",
+      kat_keluhan: "",
+      problem: "",
+      kat_problem: "",
+      solusi: "",
+      waktu_mulai: null,
+      waktu_selesai: null,
+      count_bw: "",
+      count_cl: "",
+      saran: "",
+      status_res: "",
+      rep_ke: 0,
+      pic: null,
+    },
   });
-
-  const selectStatusCall = {
-    GR: "Garansi",
-    KS: "Kontrak Servis",
-    TST: "Tunjangan Servis Total",
-    RT: "Rental",
-    Chg: "Charge",
-  };
-
-  const selectKeluhan = {
-    P_JAM: "Paper Jam",
-    COPY_Q: "Copy Quality",
-    M_ADJUST: "Machine Adjustment",
-    ELECT: "Electrical",
-    MACH: "Machine",
-  };
-
-  const selectProblem = {
-    REPLACE: "Replace",
-    CLEAN: "Clean",
-    LUB: "Lubric",
-    ADJUST: "Adjustment",
-    REPAIR: "Repair",
-  };
-
-  const selectStatusResult = {
-    OK: "OK",
-    CONT: "Continue",
-    TS: "Technical Support",
-    SS: "Software Support",
-  };
-
-  const columns = [
-    {
-      field: "no",
-      headerName: "No.",
-      sortable: false,
-      renderCell: (params) => {
-        return params.api.getAllRowIds().indexOf(params.id) + 1;
-      },
-    },
-    {
-      field: "kode_part",
-      headerName: "Kode Part",
-      flex: 1,
-      renderCell: ({ row }) => <div>{row["d:ItemNo"]}</div>,
-    },
-    {
-      field: "nama_part",
-      headerName: "Nama Part",
-      flex: 1,
-      renderCell: ({ row }) => <div>{row["d:Description"]}</div>,
-    },
-    {
-      field: "quantity",
-      headerName: "Quantity",
-      flex: 1,
-      renderCell: ({ row }) => <div>{row["d:Quantity"]?._}</div>,
-    },
-  ];
 
   const [barang, setDataBarang] = useState([]);
   const [customer, setDataCustomer] = useState([]);
   const [searched, setSearched] = useState(true);
   const [loading, setLoading] = useState(false);
   const [expand, setExpand] = useState(true);
-  const [statusRes, setStatusRes] = useState([]);
-  const [alert, setAlert] = useState({
-    open: false,
-    message: "",
-    severity: "success", // 'success', 'error', 'warning', 'info'
-  });
+  const { alert, showAlert, closeAlert } = useAlert();
 
-  const displayValue = (data) => {
-    if (typeof data === "string") return data.trim();
-    if (typeof data === "object" && "_" in data) return String(data._).trim();
-    if (data === null || data === undefined || data == "") return "-";
-    return "-";
-  };
+  let statusRes = watch("status_res");
 
-  const showAlert = (message, severity) => {
-    setAlert({
-      open: true,
-      message,
-      severity,
-    });
-  };
-
-  const handleCloseAlert = () => {
-    setAlert((prev) => ({ ...prev, open: false }));
+  const handleFileSelect = (file) => {
+    setValue("pic", file, { shouldValidate: true });
   };
 
   useEffect(() => {
     const fetchFlkData = async () => {
       try {
-        const response = await fetch(
+        const response = await axios.get(
           import.meta.env.VITE_API_URL + `api/get-flk-one-by-id?${id}`
         );
-        const data = await response.json();
-        const datas = data[0];
+        const datas = response.data[0];
 
         if (datas && datas.no_rep) {
-          setFormData((prev) => ({
-            ...prev,
-            ...datas,
-            waktu_call: datas.waktu_call ? dayjs(datas.waktu_call) : null,
-            waktu_dtg: datas.waktu_dtg ? dayjs(datas.waktu_dtg) : null,
-            waktu_mulai: datas.waktu_mulai ? dayjs(datas.waktu_mulai) : null,
-            waktu_selesai: datas.waktu_selesai
-              ? dayjs(datas.waktu_selesai)
-              : null,
-          }));
+          Object.entries(datas).forEach(([key, value]) => {
+            let parsedValue = value;
+
+            if (
+              [
+                "waktu_call",
+                "waktu_dtg",
+                "waktu_mulai",
+                "waktu_selesai",
+              ].includes(key)
+            ) {
+              parsedValue = value ? dayjs(value) : null;
+            }
+
+            setValue(key, parsedValue, { shouldDirty: true });
+          });
 
           // Fetch related data
           const cus = await fetchDataBarang(datas.no_rep);
@@ -185,9 +128,14 @@ const Edit = () => {
           setExpand(false);
         } else {
           console.error("No data found or no_rep is missing");
+          showAlert(
+            "Gagal mendapat data laporan no rep tidak ditemukan.",
+            "error"
+          );
         }
       } catch (error) {
         console.error("Fetch failed:", error);
+        showAlert("Gagal mendapat data laporan.", "error");
       }
     };
 
@@ -196,10 +144,10 @@ const Edit = () => {
 
   const fetchDataBarang = async (id) => {
     try {
-      const fetch_barang = await fetch(
+      const fetch_barang = await axios.get(
         import.meta.env.VITE_API_URL + `api/nav-data?id=${id}`
       );
-      const data = await fetch_barang.json();
+      const data = fetch_barang.data;
 
       if (!data.length <= 0) {
         setDataBarang(data);
@@ -209,15 +157,16 @@ const Edit = () => {
       return data[0]["d:Sell_to_Customer_No"];
     } catch (error) {
       console.error("Error fetching barang:", error);
+      showAlert("Ambil data barang gagal.", "error");
     }
   };
 
   const fetchContRes = async (id_cus, no_seri) => {
-    const response = await fetch(
+    const response = await axios.get(
       import.meta.env.VITE_API_URL +
         `api/get-rep-seri-by-cus?id_cus=${id_cus}&no_seri=${no_seri}&${id}`
     );
-    const data = await response.json();
+    const data = response.data;
 
     if (data.length <= 0) {
       return;
@@ -226,133 +175,53 @@ const Edit = () => {
     const incre = data[0]["rep_ke"] + 1;
 
     if (data[0]["status_res"] === "CONT") {
-      setFormData({
-        ...formData,
-        rep_ke: incre,
-      });
+      setValue("rep_ke", incre);
     }
   };
 
-  const debouncedUpdate = useCallback(
-    debounce((name, value) => {
-      setFormData((prev) => ({
-        ...prev,
-        [name]: value,
-      }));
-    }, 10),
-    []
-  );
-
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-
-    // Update debounced form state
-    debouncedUpdate(name, value);
-
-    if (e.target.name === "status_res") {
-      setStatusRes(e.target.value);
-    }
-  };
-
-  const handleFileSelect = (file) => {
-    setFormData((prev) => ({ ...prev, pic: file }));
-  };
-
-  const handleFileError = (message) => {
-    if (message) showAlert(message, "error");
-  };
-
-  const handleDateChange = (field, newDate) => {
-    const now = dayjs();
-    const diffInDays = now.diff(dayjs(newDate), "day");
-
-    if (diffInDays > import.meta.env.VITE_BACKDATE_DAYS) {
-      showAlert("Waktu tidak boleh lebih dari 30 hari di belakang!", "error");
-    } else if (
-      diffInDays < import.meta.env.VITE_FORWARD_PENJADWALAN_DAYS &&
-      field == "waktu_dtg"
-    ) {
-      showAlert(
-        "Waktu tidak boleh lebih dari 1 hari di depan! jadwal",
-        "error"
-      );
-    } else if (diffInDays < import.meta.env.VITE_FORWARD_DAYS) {
-      showAlert("Waktu tidak boleh lebih dari 2 hari di depan! date", "error");
-    } else {
-      if (field == "waktu_selesai" && formData.waktu_mulai) {
-        const datang = dayjs(formData.waktu_mulai);
-        const selesai = dayjs(newDate);
-
-        if (selesai.isBefore(datang)) {
-          showAlert(
-            "Waktu selesai tidak boleh lebih awal dari waktu mulai.",
-            "error"
-          );
-          return;
-        }
-      }
-
-      if (field == "waktu_dtg" && formData.waktu_call) {
-        const call = dayjs(formData.waktu_call);
-        const dtg = dayjs(newDate);
-
-        if (dtg.isBefore(call)) {
-          showAlert(
-            "Waktu Penjadwalan tidak boleh lebih awal dari waktu call.",
-            "error"
-          );
-          return;
-        }
-      }
-
-      setFormData({
-        ...formData,
-        [field]: newDate,
-      });
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const onSubmit = async (values) => {
     setLoading(true);
-
-    const data = new FormData();
-    data.append("pic", formData.pic);
-    data.append("created_by", 1);
-    data.append("type", 1);
-    data.append(
-      "rep_ke",
-      formData.status_res === "CONT" ? formData.rep_ke : null
-    );
-
-    // Append all other fields
-    Object.keys(formData).forEach((key) => {
-      if (!["pic", "created_by", "type", "rep_ke"].includes(key)) {
-        data.append(key, formData[key]);
-      } else if (
-        ["waktu_call", "waktu_dtg", "waktu_mulai", "waktu_selesai"].includes(
-          key
-        )
-      ) {
-        const val = formData[key];
-        data.append(key, val.toISOString());
-      }
-    });
-
     try {
-      const response = await fetch(
-        import.meta.env.VITE_API_URL + `api/edit-flk?${id}`,
-        {
-          method: "POST",
-          body: data,
+      const data = new FormData();
+
+      // Always append the file
+      // data.append("pic", getValues("pic"));
+      data.append("created_by", 1);
+      data.append("type", 1);
+
+      // Append all fields except special ones
+      Object.entries(values).forEach(([key, value]) => {
+        if (
+          ["waktu_call", "waktu_dtg", "waktu_mulai", "waktu_selesai"].includes(
+            key
+          ) &&
+          value instanceof Date
+        ) {
+          data.append(key, value.toISOString());
+        } else if (key === "rep_ke" && values.status_res !== "CONT") {
+          data.append(key, "");
+        } else {
+          data.append(key, value);
         }
+      });
+
+      // data.forEach((value, key) => {
+      //   console.log(key + " = " + value);
+      // });
+
+      // return;
+
+      // Submit main form
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}api/edit-flk?${id}`,
+        data
       );
+      const { data: result } = response;
+      console.log(response);
+      console.log(response.ok);
 
-      const result = await response.json();
-      setLoading(false);
-
-      if (response.ok) {
-        // Redirect to homepage after successful submission
+      if (response.data.ok) {
+        setLoading(false);
         navigate("/flk", {
           state: {
             message: "Data Laporan Kerja Berhasil Diubah!",
@@ -360,13 +229,16 @@ const Edit = () => {
           },
         });
       } else {
-        showAlert("Failed to submit data!", "error");
+        showAlert("Data Laporan Kerja Gagal Diubah !!", "error");
       }
     } catch (error) {
       console.error("Error submitting data:", error);
-      showAlert("Something went wrong!", "error");
-      setLoading(false);
+      showAlert("Terjadi kesalahan saat mengirim data.", "error");
     }
+  };
+
+  const onInvalid = (errors) => {
+    console.log("Form has errors:", errors);
   };
 
   // Theme and media query for responsiveness
@@ -379,7 +251,10 @@ const Edit = () => {
         Edit Form Laporan Kerja
       </Typography>
       <LocalizationProvider dateAdapter={AdapterDayjs}>
-        <form onSubmit={handleSubmit}>
+        <form
+          onSubmit={handleSubmit(onSubmit, onInvalid)}
+          encType="multipart/form-data"
+        >
           <Grid container spacing={5} marginY={"2em"} alignItems="center">
             {/* Input Report */}
             <Grid size={{ xs: 12, md: 6 }}>
@@ -387,8 +262,9 @@ const Edit = () => {
                 label="No. Report / No. Navision"
                 variant="outlined"
                 fullWidth
-                value={formData.no_rep}
-                name="no_rep"
+                {...register("no_rep")}
+                error={!!errors.no_rep}
+                helperText={errors.no_rep?.message}
                 type="number"
                 aria-readonly
                 slotProps={{
@@ -404,7 +280,7 @@ const Edit = () => {
               {/* Accordion 1 - Non Input */}
               <Grid size={12}>
                 <Accordion
-                  disabled={!searched || !formData.no_rep}
+                  disabled={!searched || !getValues("no_rep")}
                   expanded={!expand}
                 >
                   <AccordionSummary
@@ -441,6 +317,7 @@ const Edit = () => {
                           {displayValue(customer?.["d:Penanggung_jawab"])}
                         </Typography>
                       </Grid>
+                      {/* Row 2 */}
                       <Grid size={{ xs: 12, md: 6 }}>
                         <Typography>No. Seri :</Typography>
                         <Grid>
@@ -459,7 +336,7 @@ const Edit = () => {
               {/* Accordion 2 - Non Input */}
               <Grid size={12}>
                 <Accordion
-                  disabled={!searched || !formData.no_rep}
+                  disabled={!searched || !getValues("no_rep")}
                   expanded={!expand}
                 >
                   <AccordionSummary
@@ -473,6 +350,7 @@ const Edit = () => {
                   </AccordionSummary>
                   <AccordionDetails>
                     <Grid container spacing={5}>
+                      {/* Row 1 */}
                       <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                         <Typography>Kode Mesin :</Typography>
                         <Typography>
@@ -483,7 +361,7 @@ const Edit = () => {
                           {displayValue(customer?.["d:Machine_Name"])}
                         </Typography>
                       </Grid>
-
+                      {/* Row 2 */}
                       <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                         <Typography>
                           Type : {displayValue(customer?.["d:Machine_Code"])}
@@ -491,7 +369,7 @@ const Edit = () => {
                         <Typography>Tanggal Instalasi :</Typography>
                         <Typography>Tanggal Kontrak :</Typography>
                       </Grid>
-
+                      {/* Row 3 */}
                       <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                         <Typography>Type Service :</Typography>
                         <Typography>Masa :</Typography>
@@ -505,7 +383,7 @@ const Edit = () => {
               {/* Accordion 3 */}
               <Grid size={12}>
                 <Accordion
-                  disabled={!searched || !formData.no_rep}
+                  disabled={!searched || !getValues("no_rep")}
                   expanded={!expand}
                 >
                   <AccordionSummary
@@ -529,9 +407,9 @@ const Edit = () => {
                         <TextField
                           variant="outlined"
                           fullWidth
-                          value={formData.no_call}
-                          name="no_call"
-                          onChange={handleChange}
+                          {...register("no_call")}
+                          error={!!errors.no_call}
+                          helperText={errors.no_call?.message}
                           type="number"
                           slotProps={{
                             input: {
@@ -555,35 +433,99 @@ const Edit = () => {
                         <TextField
                           variant="outlined"
                           fullWidth
-                          value={formData.pelapor}
-                          name="pelapor"
-                          onChange={handleChange}
+                          {...register("pelapor")}
+                          error={!!errors.pelapor}
+                          helperText={errors.pelapor?.message}
                         />
                       </Grid>
                       <Grid size={{ xs: 12, md: 6 }}>
                         <InputLabel id="waktu_call">Waktu Call</InputLabel>
-                        <DateTimePicker
-                          labelId="waktu_call"
-                          value={formData.waktu_call}
-                          slotProps={{ textField: { fullWidth: true } }}
-                          onChange={(newValue) =>
-                            handleDateChange("waktu_call", newValue)
-                          }
-                          ampm={false}
+                        <Controller
+                          name="waktu_call"
+                          control={control}
+                          render={({ field }) => (
+                            <DateTimePicker
+                              ampm={false}
+                              {...field}
+                              slotProps={{
+                                textField: {
+                                  fullWidth: true,
+                                  error: !!errors.waktu_call,
+                                  helperText: errors.waktu_call?.message,
+                                },
+                              }}
+                            />
+                          )}
                         />
                       </Grid>
                       <Grid size={{ xs: 12, md: 6 }}>
                         <InputLabel id="waktu_dtg">
                           Waktu Penjadwalan
                         </InputLabel>
-                        <DateTimePicker
-                          labelId="waktu_dtg"
-                          value={formData.waktu_dtg}
-                          slotProps={{ textField: { fullWidth: true } }}
-                          onChange={(newValue) =>
-                            handleDateChange("waktu_dtg", newValue)
-                          }
-                          ampm={false}
+                        <Controller
+                          name="waktu_dtg"
+                          control={control}
+                          render={({ field }) => (
+                            <DateTimePicker
+                              ampm={false}
+                              {...field}
+                              onChange={(newValue) => {
+                                const now = dayjs();
+                                const diffInDays = now.diff(
+                                  dayjs(newValue),
+                                  "day"
+                                );
+                                const callTime = watch("waktu_call");
+
+                                if (
+                                  diffInDays <
+                                  import.meta.env.VITE_FORWARD_PENJADWALAN_DAYS
+                                ) {
+                                  showAlert(
+                                    `Waktu tidak boleh lebih dari ${
+                                      import.meta.env
+                                        .VITE_FORWARD_PENJADWALAN_DAYS
+                                    } hari ke depan.`,
+                                    "error"
+                                  );
+                                  return;
+                                }
+
+                                if (
+                                  diffInDays >
+                                  import.meta.env.VITE_BACKDATE_DAYS
+                                ) {
+                                  showAlert(
+                                    `Waktu tidak boleh lebih dari ${
+                                      import.meta.env.VITE_BACKDATE_DAYS
+                                    } hari ke belakang.`,
+                                    "error"
+                                  );
+                                  return;
+                                }
+
+                                if (
+                                  callTime &&
+                                  dayjs(newValue).isBefore(dayjs(callTime))
+                                ) {
+                                  showAlert(
+                                    "Waktu Penjadwalan tidak boleh sebelum Waktu Call.",
+                                    "error"
+                                  );
+                                  return;
+                                }
+
+                                field.onChange(newValue); // still update the form
+                              }}
+                              slotProps={{
+                                textField: {
+                                  fullWidth: true,
+                                  error: !!errors.waktu_dtg,
+                                  helperText: errors.waktu_dtg?.message,
+                                },
+                              }}
+                            />
+                          )}
                         />
                       </Grid>
                       <Grid size={{ xs: 12, md: 6 }}>
@@ -591,30 +533,24 @@ const Edit = () => {
                           <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
                             Status Call
                           </Typography>
-                          <Select
+                          <Controller
                             name="status_call"
-                            value={formData.status_call}
-                            onChange={handleChange}
-                            variant="outlined"
-                            // displayEmpty
-                            // renderValue={(selected) => {
-                            //   if (selected.length === 0) {
-                            //     return <em>Pilih Kategori Status Call</em>;
-                            //   }
-
-                            //   return selected. ;
-                            // }}
-                          >
-                            <MenuItem disabled value="">
-                              <em>Pilih Kategori Status Call</em>
-                            </MenuItem>
-                            {Object.keys(selectStatusCall).map((key) => (
-                              <MenuItem value={key} key={key}>
-                                {displayValue(key)} -{" "}
-                                {displayValue(selectStatusCall[key])}
-                              </MenuItem>
-                            ))}
-                          </Select>
+                            control={control}
+                            render={({ field }) => (
+                              <Select {...field} variant="outlined">
+                                <MenuItem disabled value="">
+                                  <em>Pilih Kategori Status Call</em>
+                                </MenuItem>
+                                {Object.entries(selectStatusCall).map(
+                                  ([value, label]) => (
+                                    <MenuItem key={value} value={value}>
+                                      {label}
+                                    </MenuItem>
+                                  )
+                                )}
+                              </Select>
+                            )}
+                          />
                         </FormControl>
                       </Grid>
                       <Grid size={{ xs: 12, md: 6 }}>
@@ -627,11 +563,11 @@ const Edit = () => {
                         <TextField
                           variant="outlined"
                           fullWidth
-                          value={formData.keluhan}
-                          name="keluhan"
                           multiline
                           rows={3}
-                          onChange={handleChange}
+                          {...register("keluhan")}
+                          error={!!errors.keluhan}
+                          helperText={errors.keluhan?.message}
                         />
                       </Grid>
                       <Grid size={{ xs: 12, md: 6 }}>
@@ -639,21 +575,25 @@ const Edit = () => {
                           <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
                             Kategori Keluhan
                           </Typography>
-                          <Select
+                          <Controller
                             name="kat_keluhan"
-                            value={formData.kat_keluhan}
-                            onChange={handleChange}
+                            control={control}
                             variant="outlined"
-                          >
-                            <MenuItem disabled value="">
-                              <em>Pilih Kategori Keluhan</em>
-                            </MenuItem>
-                            {Object.keys(selectKeluhan).map((key) => (
-                              <MenuItem value={key} key={key}>
-                                {displayValue(selectKeluhan[key])}
-                              </MenuItem>
-                            ))}
-                          </Select>
+                            render={({ field }) => (
+                              <Select {...field}>
+                                <MenuItem disabled value="">
+                                  <em>Pilih Kategori Keluhan</em>
+                                </MenuItem>
+                                {Object.entries(selectKeluhan).map(
+                                  ([value, label]) => (
+                                    <MenuItem key={value} value={value}>
+                                      {label}
+                                    </MenuItem>
+                                  )
+                                )}
+                              </Select>
+                            )}
+                          />
                         </FormControl>
                       </Grid>
                     </Grid>
@@ -664,7 +604,7 @@ const Edit = () => {
               {/* Accordion 4 */}
               <Grid size={12}>
                 <Accordion
-                  disabled={!searched || !formData.no_rep}
+                  disabled={!searched || !getValues("no_rep")}
                   expanded={!expand}
                 >
                   <AccordionSummary
@@ -688,10 +628,10 @@ const Edit = () => {
                         <TextField
                           variant="outlined"
                           fullWidth
-                          value={formData.no_lap}
-                          name="no_lap"
                           type="number"
-                          onChange={handleChange}
+                          {...register("no_lap")}
+                          error={!!errors.no_lap}
+                          helperText={errors.no_lap?.message}
                         />
                       </Grid>
 
@@ -705,11 +645,11 @@ const Edit = () => {
                         <TextField
                           variant="outlined"
                           fullWidth
-                          value={formData.problem}
-                          name="problem"
                           multiline
                           rows={3}
-                          onChange={handleChange}
+                          {...register("problem")}
+                          error={!!errors.problem}
+                          helperText={errors.problem?.message}
                         />
                       </Grid>
 
@@ -718,21 +658,25 @@ const Edit = () => {
                           <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
                             Kategori Problem
                           </Typography>
-                          <Select
+                          <Controller
                             name="kat_problem"
-                            value={formData.kat_problem}
-                            onChange={handleChange}
+                            control={control}
                             variant="outlined"
-                          >
-                            <MenuItem disabled value="">
-                              <em>Pilih Kategori Problem</em>
-                            </MenuItem>
-                            {Object.keys(selectProblem).map((key) => (
-                              <MenuItem value={key} key={key}>
-                                {displayValue(selectProblem[key])}
-                              </MenuItem>
-                            ))}
-                          </Select>
+                            render={({ field }) => (
+                              <Select {...field}>
+                                <MenuItem disabled value="">
+                                  <em>Pilih Kategori Problem</em>
+                                </MenuItem>
+                                {Object.entries(selectProblem).map(
+                                  ([value, label]) => (
+                                    <MenuItem key={value} value={value}>
+                                      {label}
+                                    </MenuItem>
+                                  )
+                                )}
+                              </Select>
+                            )}
+                          />
                         </FormControl>
                       </Grid>
 
@@ -746,24 +690,32 @@ const Edit = () => {
                         <TextField
                           variant="outlined"
                           fullWidth
-                          value={formData.solusi}
-                          name="solusi"
                           multiline
                           rows={3}
-                          onChange={handleChange}
+                          {...register("solusi")}
+                          error={!!errors.solusi}
+                          helperText={errors.solusi?.message}
                         />
                       </Grid>
 
                       <Grid size={{ xs: 12, md: 6 }}>
                         <InputLabel id="waktu_mulai">Waktu Mulai</InputLabel>
-                        <DateTimePicker
-                          labelId="waktu_mulai"
-                          value={formData.waktu_mulai}
-                          slotProps={{ textField: { fullWidth: true } }}
-                          onChange={(newValue) =>
-                            handleDateChange("waktu_mulai", newValue)
-                          }
-                          ampm={false}
+                        <Controller
+                          name="waktu_mulai"
+                          control={control}
+                          render={({ field }) => (
+                            <DateTimePicker
+                              ampm={false}
+                              {...field}
+                              slotProps={{
+                                textField: {
+                                  fullWidth: true,
+                                  error: !!errors.waktu_mulai,
+                                  helperText: errors.waktu_mulai?.message,
+                                },
+                              }}
+                            />
+                          )}
                         />
                       </Grid>
 
@@ -771,14 +723,68 @@ const Edit = () => {
                         <InputLabel id="waktu_selesai">
                           Waktu Selesai
                         </InputLabel>
-                        <DateTimePicker
-                          labelId="waktu_selesai"
-                          value={formData.waktu_selesai}
-                          slotProps={{ textField: { fullWidth: true } }}
-                          onChange={(newValue) =>
-                            handleDateChange("waktu_selesai", newValue)
-                          }
-                          ampm={false}
+                        <Controller
+                          name="waktu_selesai"
+                          control={control}
+                          render={({ field }) => (
+                            <DateTimePicker
+                              ampm={false}
+                              {...field}
+                              onChange={(newValue) => {
+                                const now = dayjs();
+                                const diffInDays = now.diff(
+                                  dayjs(newValue),
+                                  "day"
+                                );
+                                const mulaiTime = watch("waktu_mulai");
+
+                                if (
+                                  diffInDays < import.meta.env.VITE_FORWARD_DAYS
+                                ) {
+                                  showAlert(
+                                    `Waktu tidak boleh lebih dari ${
+                                      import.meta.env.VITE_FORWARD_DAYS
+                                    } hari ke depan.`,
+                                    "error"
+                                  );
+                                  return;
+                                }
+
+                                if (
+                                  diffInDays >
+                                  import.meta.env.VITE_BACKDATE_DAYS
+                                ) {
+                                  showAlert(
+                                    `Waktu tidak boleh lebih dari ${
+                                      import.meta.env.VITE_BACKDATE_DAYS
+                                    } hari ke belakang.`,
+                                    "error"
+                                  );
+                                  return;
+                                }
+
+                                if (
+                                  mulaiTime &&
+                                  dayjs(newValue).isBefore(dayjs(mulaiTime))
+                                ) {
+                                  showAlert(
+                                    "Waktu Selesai tidak boleh sebelum Waktu Mulai.",
+                                    "error"
+                                  );
+                                  return;
+                                }
+
+                                field.onChange(newValue); // still update the form
+                              }}
+                              slotProps={{
+                                textField: {
+                                  fullWidth: true,
+                                  error: !!errors.waktu_selesai,
+                                  helperText: errors.waktu_selesai?.message,
+                                },
+                              }}
+                            />
+                          )}
                         />
                       </Grid>
 
@@ -789,12 +795,18 @@ const Edit = () => {
                         >
                           Counter B/W
                         </Typography>
-                        <NumberFormatTextField
-                          label=""
+                        <Controller
                           name="count_bw"
-                          value={formData.count_bw}
-                          onChange={handleChange}
-                          fullWidth
+                          control={control}
+                          render={({ field }) => (
+                            <NumberFormatTextField
+                              variant="outlined"
+                              fullWidth
+                              {...field}
+                              error={!!errors.count_bw}
+                              helperText={errors.count_bw?.message}
+                            />
+                          )}
                         />
                       </Grid>
 
@@ -805,12 +817,18 @@ const Edit = () => {
                         >
                           Counter CL
                         </Typography>
-                        <NumberFormatTextField
-                          label=""
+                        <Controller
                           name="count_cl"
-                          value={formData.count_cl}
-                          onChange={handleChange}
-                          fullWidth
+                          control={control}
+                          render={({ field }) => (
+                            <NumberFormatTextField
+                              variant="outlined"
+                              fullWidth
+                              {...field}
+                              error={!!errors.count_cl}
+                              helperText={errors.count_cl?.message}
+                            />
+                          )}
                         />
                       </Grid>
 
@@ -824,11 +842,11 @@ const Edit = () => {
                         <TextField
                           variant="outlined"
                           fullWidth
-                          value={formData.saran}
-                          name="saran"
                           multiline
                           rows={3}
-                          onChange={handleChange}
+                          {...register("saran")}
+                          error={!!errors.saran}
+                          helperText={errors.saran?.message}
                         />
                       </Grid>
 
@@ -837,21 +855,24 @@ const Edit = () => {
                           <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
                             Status Result
                           </Typography>
-                          <Select
+                          <Controller
                             name="status_res"
-                            value={formData.status_res}
-                            onChange={handleChange}
-                            variant="outlined"
-                          >
-                            <MenuItem disabled value="">
-                              <em>Pilih Status Result</em>
-                            </MenuItem>
-                            {Object.keys(selectStatusResult).map((key) => (
-                              <MenuItem value={key} key={key}>
-                                {displayValue(selectStatusResult[key])}
-                              </MenuItem>
-                            ))}
-                          </Select>
+                            control={control}
+                            render={({ field }) => (
+                              <Select {...field} variant="outlined">
+                                <MenuItem disabled value="">
+                                  <em>Pilih Status Result</em>
+                                </MenuItem>
+                                {Object.entries(selectStatusResult).map(
+                                  ([value, label]) => (
+                                    <MenuItem key={value} value={value}>
+                                      {label}
+                                    </MenuItem>
+                                  )
+                                )}
+                              </Select>
+                            )}
+                          />
                         </FormControl>
                       </Grid>
 
@@ -866,10 +887,9 @@ const Edit = () => {
                           <TextField
                             variant="outlined"
                             fullWidth
-                            value={formData.rep_ke}
-                            name="rep_ke"
+                            {...register("rep_ke")}
+                            aria-readonly
                             disabled
-                            onChange={handleChange}
                           />
                         </Grid>
                       )}
@@ -881,7 +901,7 @@ const Edit = () => {
               {/* Accordion 5 - Table */}
               <Grid size={12}>
                 <Accordion
-                  disabled={!searched || !formData.no_rep}
+                  disabled={!searched || !getValues("no_rep")}
                   expanded={!expand}
                 >
                   <AccordionSummary
@@ -898,7 +918,7 @@ const Edit = () => {
                       <Box sx={{ minWidth: 700 }}>
                         <DataGrid
                           rows={barang}
-                          columns={columns}
+                          columns={columnsBarang}
                           getRowId={(row) => row["d:ItemNo"]}
                           initialState={{
                             pagination: {
@@ -919,7 +939,7 @@ const Edit = () => {
               {/* Accordion 6 - Upload File */}
               <Grid size={12}>
                 <Accordion
-                  disabled={!searched || !formData.no_rep}
+                  disabled={!searched || !getValues("no_rep")}
                   expanded={!expand}
                 >
                   <AccordionSummary
@@ -937,7 +957,9 @@ const Edit = () => {
                       <Box>
                         <FileUpload
                           onFileSelect={handleFileSelect}
-                          onError={handleFileError}
+                          onError={(msg) =>
+                            msg ? showAlert(msg, "error") : null
+                          }
                         />
                       </Box>
                     </Box>
@@ -951,11 +973,11 @@ const Edit = () => {
           <Snackbar
             open={alert.open}
             autoHideDuration={5000}
-            onClose={handleCloseAlert}
+            onClose={closeAlert}
             anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
           >
             <Alert
-              onClose={handleCloseAlert}
+              onClose={closeAlert}
               variant="filled"
               severity={alert.severity}
               fontSize="inherit"
@@ -972,10 +994,14 @@ const Edit = () => {
                 type="submit"
                 variant="contained"
                 color="primary"
-                disabled={!searched || !formData.no_rep}
+                disabled={!searched || !getValues("no_rep")}
                 sx={{ width: isSmallScreen ? "100%" : "auto" }}
               >
-                {loading ? <CircularProgress size={24} /> : "Submit"}
+                {loading ? (
+                  <CircularProgress size={20} color="inherit" />
+                ) : (
+                  "Submit"
+                )}
               </Button>
             </Grid>
           </Grid>

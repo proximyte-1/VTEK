@@ -20,6 +20,14 @@ import {
   InputAdornment,
   Box,
 } from "@mui/material";
+import {
+  selectStatusCall,
+  selectKeluhan,
+  selectProblem,
+  selectStatusResult,
+} from "../utils/constants";
+import { displayValue, columnsBarang, schemaNoRep } from "../utils/helpers";
+import { useAlert } from "../utils/alert";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
@@ -29,116 +37,12 @@ import { useNavigate } from "react-router-dom";
 import { DataGrid } from "@mui/x-data-grid";
 import NumberFormatTextField from "../components/NumberFormatTextField/NumberFormatTextField";
 import FileUpload from "../components/FileUpload/FileUpload";
-import debounce from "lodash.debounce";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
-import * as yup from "yup";
 import axios from "axios";
 
 const Add = () => {
   const navigate = useNavigate();
-
-  const schema = yup.object().shape({
-    no_rep: yup.string().required(),
-    no_call: yup.string().required(),
-    no_lap: yup.string().required(),
-    pelapor: yup.string().required(),
-    waktu_call: yup.date().required(),
-    waktu_dtg: yup.date().required(),
-    status_call: yup.string().required(),
-    keluhan: yup.string().required(),
-    kat_keluhan: yup.string().required(),
-    problem: yup.string().required(),
-    kat_problem: yup.string().required(),
-    solusi: yup.string().required(),
-    waktu_mulai: yup.date().required(),
-    waktu_selesai: yup
-      .date()
-      .min(
-        yup.ref("waktu_mulai"),
-        "Waktu selesai tidak boleh sebelum waktu mulai"
-      ),
-    count_bw: yup.number().required(),
-    count_cl: yup.number().required(),
-    saran: yup.string().required(),
-    status_res: yup.string().required(),
-    pic: yup
-      .mixed()
-      .required("File bukti harus diunggah.")
-      .test(
-        "fileType",
-        "Hanya file gambar (jpg, png, jpeg) yang diperbolehkan.",
-        (value) => {
-          return (
-            value &&
-            ["image/jpeg", "image/png", "image/jpg"].includes(value.type)
-          );
-        }
-      )
-      .test("fileSize", "Ukuran file maksimal 2MB.", (value) => {
-        return value && value.size <= import.meta.env.VITE_MAX_FILE_MB;
-      }),
-  });
-
-  const selectStatusCall = {
-    GR: "Garansi",
-    KS: "Kontrak Servis",
-    TST: "Tunjangan Servis Total",
-    RT: "Rental",
-    Chg: "Charge",
-  };
-
-  const selectKeluhan = {
-    P_JAM: "Paper Jam",
-    COPY_Q: "Copy Quality",
-    M_ADJUST: "Machine Adjustment",
-    ELECT: "Electrical",
-    MACH: "Machine",
-  };
-
-  const selectProblem = {
-    REPLACE: "Replace",
-    CLEAN: "Clean",
-    LUB: "Lubric",
-    ADJUST: "Adjustment",
-    REPAIR: "Repair",
-  };
-
-  const selectStatusResult = {
-    OK: "OK",
-    CONT: "Continue",
-    TS: "Technical Support",
-    SS: "Software Support",
-  };
-
-  const columns = [
-    {
-      field: "no",
-      headerName: "No.",
-      sortable: false,
-      renderCell: (params) => {
-        return params.api.getAllRowIds().indexOf(params.id) + 1;
-      },
-    },
-    {
-      field: "kode_part",
-      headerName: "Kode Part",
-      flex: 1,
-      renderCell: ({ row }) => <div>{row["d:ItemNo"]}</div>,
-    },
-    {
-      field: "nama_part",
-      headerName: "Nama Part",
-      flex: 1,
-      renderCell: ({ row }) => <div>{row["d:Description"]}</div>,
-    },
-    {
-      field: "quantity",
-      headerName: "Quantity",
-      flex: 1,
-      renderCell: ({ row }) => <div>{row["d:Quantity"]?._}</div>,
-    },
-  ];
 
   const {
     register,
@@ -147,9 +51,11 @@ const Add = () => {
     watch,
     setValue,
     getValues,
+    reset,
     formState: { errors },
   } = useForm({
-    resolver: yupResolver(schema),
+    resolver: yupResolver(schemaNoRep),
+    context: { isEdit: false },
     defaultValues: {
       no_rep: "",
       no_call: "",
@@ -169,30 +75,20 @@ const Add = () => {
       count_cl: "",
       saran: "",
       status_res: "",
-      rep_ke: 1,
+      rep_ke: 0,
+      pic: null,
     },
   });
 
+  const { alert, showAlert, closeAlert } = useAlert();
   const [barang, setDataBarang] = useState([]);
   const [customer, setDataCustomer] = useState([]);
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [data_no_rep, setDataNoRep] = useState([]);
   const [expand, setExpand] = useState(true);
-  const [selectedFile, setSelectedFile] = useState(null);
 
   let statusRes = watch("status_res");
-  const handleFileSelect = (file) => {
-    setValue("pic", file, { shouldValidate: true });
-  };
-
-  const [alert, setAlert] = useState({
-    open: false,
-    message: "",
-    severity: "success",
-  });
-
-  const handleCloseAlert = () => setAlert((prev) => ({ ...prev, open: false }));
 
   useEffect(() => {
     async function fetchNoRep() {
@@ -209,6 +105,10 @@ const Add = () => {
     fetchNoRep();
   }, []);
 
+  const handleFileSelect = (file) => {
+    setValue("pic", file, { shouldValidate: true });
+  };
+
   const fetchDataBarang = async (id) => {
     try {
       const response = await axios.get(
@@ -217,22 +117,14 @@ const Add = () => {
       const data = response.data;
 
       if (data.length <= 0) {
-        setAlert({
-          open: true,
-          message: "Nomor Report Belum Ada Pada Navision!",
-          severity: "error",
-        });
+        showAlert("Nomor Report Belum Ada Pada Navision", "error");
         setSearched(false);
         return null;
       }
 
       const customerData = data[0];
 
-      setAlert({
-        open: true,
-        message: "Nomor Report Belum Dipakai.",
-        severity: "success",
-      });
+      showAlert("Nomor Report Belum Dipakai", "success");
       setSearched(true);
       setDataBarang(data);
       setDataCustomer(customerData);
@@ -244,11 +136,7 @@ const Add = () => {
       return customerData;
     } catch (error) {
       console.error("Error fetching barang:", error);
-      setAlert({
-        open: true,
-        message: "Gagal mengambil data dari server",
-        severity: "error",
-      });
+      showAlert("Gagal mengambil data dari server", "error");
       setSearched(false);
     }
   };
@@ -267,7 +155,10 @@ const Add = () => {
 
       const data = response.data;
 
-      if (data.length <= 0) return;
+      if (data.length <= 0) {
+        setValue("rep_ke", 0);
+        return;
+      }
 
       const increment = data[0]["rep_ke"] + 1;
 
@@ -276,11 +167,7 @@ const Add = () => {
       }
     } catch (error) {
       console.error("Error fetching continuation status:", error);
-      setAlert({
-        open: true,
-        message: "Gagal mengambil status report sebelumnya",
-        severity: "error",
-      });
+      showAlert("Gagal mengambil status report sebelumnya", "error");
     }
   };
 
@@ -290,23 +177,17 @@ const Add = () => {
     const noRep = getValues("no_rep");
 
     if (!noRep) {
-      setAlert({
-        open: true,
-        message: "Nomor Report Tidak Boleh Kosong.",
-        severity: "error",
-      });
+      showAlert("Terjadi kesalahan saat mencari data.", "error");
       setSearched(false);
       setLoading(false);
       return;
     }
 
+    reset({ no_rep: noRep });
+
     // Check if no_rep is already used
     if (data_no_rep.some((item) => item.no_rep === noRep)) {
-      setAlert({
-        open: true,
-        message: "Nomor Report Sudah Pernah Dipakai.",
-        severity: "error",
-      });
+      showAlert("Nomor Report Sudah Pernah Dipakai.", "error");
       setSearched(false);
       setLoading(false);
       return;
@@ -326,20 +207,9 @@ const Add = () => {
       setLoading(false);
     } catch (error) {
       console.error("Error in handleSearch:", error);
-      setAlert({
-        open: true,
-        message: "Terjadi kesalahan saat mencari data.",
-        severity: "error",
-      });
+      showAlert("Terjadi kesalahan saat mencari data.", "error");
       setLoading(false);
     }
-  };
-
-  const displayValue = (data) => {
-    if (typeof data === "string") return data.trim();
-    if (typeof data === "object" && "_" in data) return String(data._).trim();
-    if (data === null || data === undefined || data == "") return "-";
-    return "-";
   };
 
   const submitBarang = () => {
@@ -357,22 +227,12 @@ const Add = () => {
     return data;
   };
 
-  const submit = async (values) => {
-    console.log("test");
-    if (!selectedFile) {
-      setAlert({
-        open: true,
-        message: "File bukti harus diunggah.",
-        severity: "error",
-      });
-      return;
-    }
-
+  const onSubmit = async (values) => {
+    setLoading(true);
     try {
       const data = new FormData();
 
       // Always append the file
-      data.append("pic", selectedFile);
       data.append("created_by", 1);
       data.append("type", 1);
 
@@ -391,6 +251,12 @@ const Add = () => {
           data.append(key, value);
         }
       });
+
+      // data.forEach((value, key) => {
+      //   console.log(key + " = " + value);
+      // });
+
+      // return;
 
       // Submit main form
       const response = await axios.post(
@@ -417,6 +283,7 @@ const Add = () => {
       );
 
       if (barangResponse.status === 200) {
+        setLoading(false);
         navigate("/flk", {
           state: {
             message: "Data Laporan Kerja Berhasil Ditambahkan!",
@@ -424,20 +291,16 @@ const Add = () => {
           },
         });
       } else {
-        setAlert({
-          open: true,
-          message: "Add Data Barang Failed !!",
-          severity: "error",
-        });
+        showAlert("Add Data Barang Failed !!", "error");
       }
     } catch (error) {
       console.error("Error submitting data:", error);
-      setAlert({
-        open: true,
-        message: "Terjadi kesalahan saat mengirim data.",
-        severity: "error",
-      });
+      showAlert("Terjadi kesalahan saat mengirim data.", "error");
     }
+  };
+
+  const onInvalid = (errors) => {
+    console.log("Form has errors:", errors);
   };
 
   // Theme and media query for responsiveness
@@ -450,7 +313,10 @@ const Add = () => {
         New Laporan Kerja
       </Typography>
       <LocalizationProvider dateAdapter={AdapterDateFns}>
-        <form onSubmit={handleSubmit(submit)} encType="multipart/form-data">
+        <form
+          onSubmit={handleSubmit(onSubmit, onInvalid)}
+          encType="multipart/form-data"
+        >
           <Grid container spacing={5} marginY={"2em"} alignItems="center">
             {/* Input Report */}
             <Grid size={{ xs: 12, md: 6 }}>
@@ -479,6 +345,7 @@ const Add = () => {
                 variant="contained"
                 color="primary"
                 onClick={handleSearch}
+                disabled={loading}
               >
                 {loading ? <CircularProgress size={24} /> : "Search"}
               </Button>
@@ -524,6 +391,7 @@ const Add = () => {
                           {displayValue(customer?.["d:Penanggung_jawab"])}
                         </Typography>
                       </Grid>
+                      {/* Row 2 */}
                       <Grid size={{ xs: 12, md: 6 }}>
                         <Typography>No. Seri :</Typography>
                         <Grid>
@@ -686,14 +554,13 @@ const Add = () => {
                                   diffInDays <
                                   import.meta.env.VITE_FORWARD_PENJADWALAN_DAYS
                                 ) {
-                                  setAlert({
-                                    open: true,
-                                    message: `Waktu tidak boleh lebih dari ${
+                                  showAlert(
+                                    `Waktu tidak boleh lebih dari ${
                                       import.meta.env
                                         .VITE_FORWARD_PENJADWALAN_DAYS
                                     } hari ke depan.`,
-                                    severity: "error",
-                                  });
+                                    "error"
+                                  );
                                   return;
                                 }
 
@@ -701,13 +568,12 @@ const Add = () => {
                                   diffInDays >
                                   import.meta.env.VITE_BACKDATE_DAYS
                                 ) {
-                                  setAlert({
-                                    open: true,
-                                    message: `Waktu tidak boleh lebih dari ${
+                                  showAlert(
+                                    `Waktu tidak boleh lebih dari ${
                                       import.meta.env.VITE_BACKDATE_DAYS
                                     } hari ke belakang.`,
-                                    severity: "error",
-                                  });
+                                    "error"
+                                  );
                                   return;
                                 }
 
@@ -715,12 +581,10 @@ const Add = () => {
                                   callTime &&
                                   dayjs(newValue).isBefore(dayjs(callTime))
                                 ) {
-                                  setAlert({
-                                    open: true,
-                                    message:
-                                      "Waktu Penjadwalan tidak boleh sebelum Waktu Call.",
-                                    severity: "error",
-                                  });
+                                  showAlert(
+                                    "Waktu Penjadwalan tidak boleh sebelum Waktu Call.",
+                                    "error"
+                                  );
                                   return;
                                 }
 
@@ -836,9 +700,8 @@ const Add = () => {
                         </Typography>
                         <TextField
                           variant="outlined"
+                          type="number"
                           fullWidth
-                          multiline
-                          rows={3}
                           {...register("no_lap")}
                           error={!!errors.no_lap}
                           helperText={errors.no_lap?.message}
@@ -951,13 +814,12 @@ const Add = () => {
                                 if (
                                   diffInDays < import.meta.env.VITE_FORWARD_DAYS
                                 ) {
-                                  setAlert({
-                                    open: true,
-                                    message: `Waktu tidak boleh lebih dari ${
+                                  showAlert(
+                                    `Waktu tidak boleh lebih dari ${
                                       import.meta.env.VITE_FORWARD_DAYS
                                     } hari ke depan.`,
-                                    severity: "error",
-                                  });
+                                    "error"
+                                  );
                                   return;
                                 }
 
@@ -965,13 +827,12 @@ const Add = () => {
                                   diffInDays >
                                   import.meta.env.VITE_BACKDATE_DAYS
                                 ) {
-                                  setAlert({
-                                    open: true,
-                                    message: `Waktu tidak boleh lebih dari ${
+                                  showAlert(
+                                    `Waktu tidak boleh lebih dari ${
                                       import.meta.env.VITE_BACKDATE_DAYS
                                     } hari ke belakang.`,
-                                    severity: "error",
-                                  });
+                                    "error"
+                                  );
                                   return;
                                 }
 
@@ -979,12 +840,10 @@ const Add = () => {
                                   mulaiTime &&
                                   dayjs(newValue).isBefore(dayjs(mulaiTime))
                                 ) {
-                                  setAlert({
-                                    open: true,
-                                    message:
-                                      "Waktu Selesai tidak boleh sebelum Waktu Mulai.",
-                                    severity: "error",
-                                  });
+                                  showAlert(
+                                    "Waktu Selesai tidak boleh sebelum Waktu Mulai.",
+                                    "error"
+                                  );
                                   return;
                                 }
 
@@ -1009,12 +868,18 @@ const Add = () => {
                         >
                           Counter B/W
                         </Typography>
-                        <NumberFormatTextField
-                          variant="outlined"
-                          fullWidth
-                          {...register("count_bw")}
-                          error={!!errors.count_bw}
-                          helperText={errors.count_bw?.message}
+                        <Controller
+                          name="count_bw"
+                          control={control}
+                          render={({ field }) => (
+                            <NumberFormatTextField
+                              variant="outlined"
+                              fullWidth
+                              {...field}
+                              error={!!errors.count_bw}
+                              helperText={errors.count_bw?.message}
+                            />
+                          )}
                         />
                       </Grid>
 
@@ -1025,12 +890,18 @@ const Add = () => {
                         >
                           Counter C/L
                         </Typography>
-                        <NumberFormatTextField
-                          variant="outlined"
-                          fullWidth
-                          {...register("count_cl")}
-                          error={!!errors.count_cl}
-                          helperText={errors.count_cl?.message}
+                        <Controller
+                          name="count_cl"
+                          control={control}
+                          render={({ field }) => (
+                            <NumberFormatTextField
+                              variant="outlined"
+                              fullWidth
+                              {...field}
+                              error={!!errors.count_cl}
+                              helperText={errors.count_cl?.message}
+                            />
+                          )}
                         />
                       </Grid>
 
@@ -1091,6 +962,7 @@ const Add = () => {
                             fullWidth
                             {...register("rep_ke")}
                             aria-readonly
+                            disabled
                           />
                         </Grid>
                       )}
@@ -1120,7 +992,7 @@ const Add = () => {
                       <Box sx={{ minWidth: 700 }}>
                         <DataGrid
                           rows={barang}
-                          columns={columns}
+                          columns={columnsBarang}
                           getRowId={(row) => row["d:ItemNo"]}
                           initialState={{
                             pagination: {
@@ -1160,13 +1032,7 @@ const Add = () => {
                         <FileUpload
                           onFileSelect={handleFileSelect}
                           onError={(msg) =>
-                            msg
-                              ? setAlert({
-                                  open: true,
-                                  message: msg,
-                                  severity: "error",
-                                })
-                              : null
+                            msg ? showAlert(msg, "error") : null
                           }
                         />
                       </Box>
@@ -1181,11 +1047,11 @@ const Add = () => {
           <Snackbar
             open={alert.open}
             autoHideDuration={5000}
-            onClose={handleCloseAlert}
+            onClose={closeAlert}
             anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
           >
             <Alert
-              onClose={handleCloseAlert}
+              onClose={closeAlert}
               variant="filled"
               severity={alert.severity}
               fontSize="inherit"
@@ -1205,7 +1071,11 @@ const Add = () => {
                 disabled={!searched || !getValues("no_rep")}
                 sx={{ width: isSmallScreen ? "100%" : "auto" }}
               >
-                Submit
+                {loading ? (
+                  <CircularProgress size={20} color="inherit" />
+                ) : (
+                  "Submit"
+                )}
               </Button>
             </Grid>
           </Grid>

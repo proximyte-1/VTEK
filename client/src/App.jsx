@@ -10,6 +10,9 @@ import EditNoSeri from "./pages/EditNoSeri_new";
 import FLKNoSeri from "./pages/FLKNoSeri";
 import FLKNoRep from "./pages/FLKNoRep";
 import Report from "./pages/Report";
+import Users from "./pages/Users/Users";
+import AddUsers from "./pages/Users/AddUsers";
+import EditUsers from "./pages/Users/EditUsers";
 
 function App() {
   return (
@@ -29,6 +32,13 @@ function App() {
             <Route index element={<FLKNoSeri />} />
             <Route path="add" element={<AddNoSeri />} />
             <Route path="edit/:id" element={<EditNoSeri />} />
+          </Route>
+
+          {/* Users Group */}
+          <Route path="users">
+            <Route index element={<Users />} />
+            <Route path="add" element={<AddUsers />} />
+            <Route path="edit/:id" element={<EditUsers />} />
           </Route>
 
           {/* Admin Group */}

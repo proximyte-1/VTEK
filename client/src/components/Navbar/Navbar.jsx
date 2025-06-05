@@ -28,8 +28,8 @@ const menu_flk = [
   { name: "Tanpa Barang", endpoint: "/flk-no-barang" },
 ];
 const menu_master = [
-  { name: "User", endpoint: "/admin/user" },
-  { name: "Global Settings", endpoint: "/admin/settings" },
+  { name: "User", endpoint: "/users" },
+  { name: "Global Settings", endpoint: "/settings" },
 ];
 
 function Navbar() {

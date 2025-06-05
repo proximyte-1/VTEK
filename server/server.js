@@ -11,6 +11,7 @@ import dayjs from "dayjs";
 import xml2js from "xml2js";
 import httpntlm from "httpntlm";
 import ExcelJS from "exceljs";
+import bcrypt from "bcrypt";
 
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
@@ -20,6 +21,7 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, "../.env") });
 
 const PORT = process.env.PORT || 3000;
+const SALT = 10;
 
 // Database config
 const dbConfig = {
@@ -46,8 +48,12 @@ const initDB = async () => {
 
 // Upload path setup
 const uploadPath = path.join(__dirname, "../client/src/uploads");
+const uploadUsersPath = path.join(__dirname, "../client/src/uploads/users");
 if (!fs.existsSync(uploadPath)) {
   fs.mkdirSync(uploadPath, { recursive: true });
+}
+if (!fs.existsSync(uploadUsersPath)) {
+  fs.mkdirSync(uploadUsersPath, { recursive: true });
 }
 
 // Multer config for file uploads
@@ -221,10 +227,51 @@ app.get("/api/get-no-rep", async (req, res) => {
   }
 });
 
+app.get("/api/get-users", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_USER}`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/get-users-by-id", async (req, res) => {
+  const { id = "" } = req.query;
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_USER} WHERE id = '${id}'`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/reset-pass", async (req, res) => {
+  const { id = "" } = req.query;
+  const now = formatDateForSQL(dayjs());
+
+  try {
+    const result = await pool.query(
+      `UPDATE dbo.${process.env.TABLE_USER} SET reset_pass = '${now}' WHERE id = ${id}`
+    );
+
+    res.json({
+      ok: true,
+      message: "Berhasil",
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
 app.get("/api/nav-data", (req, res) => {
   const id = "SPGFI" + req.query.id;
   const navURL = process.env.NAV_WS_URL + navFilterEncode("FGINO", id);
-  console.log(navURL);
   fetchNavData(navURL, (err, data) => {
     if (err) return res.status(err.status).json(err);
     res.json(data);
@@ -710,6 +757,58 @@ app.post("/api/export-excel", async (req, res) => {
   } catch (err) {
     console.error("Excel export error:", err);
     res.status(500).send("Failed to generate Excel report");
+  }
+});
+
+app.post("/api/create-users", upload.single("pic"), async (req, res) => {
+  const { name, username, pass } = req.body;
+  let filePath = null;
+
+  const file = req.file;
+  if (file) filePath = path.join(uploadPath, file.filename);
+
+  const hashedPassword = await bcrypt.hash(pass, SALT);
+
+  try {
+    const query = `
+      INSERT INTO dbo.${process.env.TABLE_USER} (name, username, pass, pic)
+      VALUES ('${name}', '${username}', '${hashedPassword}', '${filePath}')
+    `;
+
+    const result = await pool.query(query);
+    res.json({ ok: true, message: "User inserted" });
+  } catch (err) {
+    console.error(err);
+    res
+      .status(500)
+      .json({ ok: false, message: "Insert failed", error: err.message });
+  }
+});
+
+app.post("/api/edit-users", upload.single("pic"), async (req, res) => {
+  const { id } = req.query;
+  const { name, username } = req.body;
+  let filePath = null;
+
+  const file = req.file;
+  if (file) filePath = path.join(uploadPath, file.filename);
+
+  try {
+    const query = `
+      UPDATE [dbo].${process.env.TABLE_USER}
+      SET [name] = '${name}'
+      ,[username] = '${username}'
+      ,[pic] = '${filePath}'
+      WHERE id = '${id}'
+    `;
+
+    const result = await pool.query(query);
+    res.json({ ok: true, message: "User updated" });
+  } catch (err) {
+    console.error(err);
+    res
+      .status(500)
+      .json({ ok: false, message: "Update failed", error: err.message });
   }
 });
 
