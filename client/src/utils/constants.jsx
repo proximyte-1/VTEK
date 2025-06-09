@@ -28,3 +28,10 @@ export const selectStatusResult = {
   TS: "Technical Support",
   SS: "Software Support",
 };
+
+export const selectService = {
+  OK: "OK",
+  CONT: "Continue",
+  TS: "Technical Support",
+  SS: "Software Support",
+};

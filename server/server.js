@@ -760,6 +760,7 @@ app.post("/api/export-excel", async (req, res) => {
   }
 });
 
+// USERS CRUD
 app.post("/api/create-users", upload.single("pic"), async (req, res) => {
   const { name, username, pass } = req.body;
   let filePath = null;
@@ -809,6 +810,57 @@ app.post("/api/edit-users", upload.single("pic"), async (req, res) => {
     res
       .status(500)
       .json({ ok: false, message: "Update failed", error: err.message });
+  }
+});
+
+// CONTRACT CRUD
+app.get("/api/get-last-contract", async (req, res) => {
+  const { no_seri } = req.query;
+
+  console.log(no_seri);
+
+  try {
+    const result = await pool.query(
+      `SELECT TOP 1 tgl_contract FROM dbo.${process.env.TABLE_CONTRACT} WHERE no_seri = '${no_seri}' ORDER BY tgl_contract DESC`
+    );
+
+    console.log(result);
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/get-contract", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_CONTRACT}`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.post("/api/create-contract", upload.none(), async (req, res) => {
+  const { no_seri, tgl_inst, tgl_contract, type_service, masa } = req.body;
+
+  try {
+    const inst = formatDateForSQL(tgl_inst);
+    const contract = formatDateForSQL(tgl_contract);
+
+    const query = `
+      INSERT INTO dbo.${process.env.TABLE_CONTRACT} (no_seri, tgl_inst, tgl_last_inst, tgl_contract, type_service, masa)
+      VALUES ('${no_seri}', '${inst}', '${inst}', '${contract}', '${type_service}', '${masa}')
+    `;
+
+    const result = await pool.query(query);
+    res.json({ ok: true, message: "Contract inserted" });
+  } catch (err) {
+    console.error(err);
+    res
+      .status(500)
+      .json({ ok: false, message: "Insert failed", error: err.message });
   }
 });
 

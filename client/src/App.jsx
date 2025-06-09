@@ -13,6 +13,9 @@ import Report from "./pages/Report";
 import Users from "./pages/Users/Users";
 import AddUsers from "./pages/Users/AddUsers";
 import EditUsers from "./pages/Users/EditUsers";
+import Contract from "./pages/Contract/Contract";
+import AddContract from "./pages/Contract/AddContract";
+import EditContract from "./pages/Contract/EditContract";
 
 function App() {
   return (
@@ -39,6 +42,13 @@ function App() {
             <Route index element={<Users />} />
             <Route path="add" element={<AddUsers />} />
             <Route path="edit/:id" element={<EditUsers />} />
+          </Route>
+
+          {/* Contract Group */}
+          <Route path="contract">
+            <Route index element={<Contract />} />
+            <Route path="add" element={<AddContract />} />
+            <Route path="edit/:id" element={<EditContract />} />
           </Route>
 
           {/* Admin Group */}

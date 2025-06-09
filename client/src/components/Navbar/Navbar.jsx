@@ -29,6 +29,7 @@ const menu_flk = [
 ];
 const menu_master = [
   { name: "User", endpoint: "/users" },
+  { name: "Kontrak", endpoint: "/contract" },
   { name: "Global Settings", endpoint: "/settings" },
 ];
 

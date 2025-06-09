@@ -116,6 +116,15 @@ export const schemaUsers = yup.object().shape({
   }),
 });
 
+export const schemaContract = yup.object().shape({
+  no_seri: yup.string().required(),
+  type_service: yup.string().required(),
+  masa: yup.number().required(),
+  tgl_inst: yup.date().required(),
+  // tgl_last_inst: yup.date().required(),
+  tgl_contract: yup.date().required(),
+});
+
 export const displayValue = (data) => {
   if (typeof data === "string") return data.trim();
   if (typeof data === "object" && "_" in data) return String(data._).trim();
