@@ -78,3 +78,64 @@ GO
 
 
 
+--------- Contract ---------------
+USE [PJPNavisionExtension]
+GO
+
+/****** Object:  Table [dbo].[VTK_Contract]    Script Date: 09/06/2025 16.58.56 ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[VTK_Contract](
+	[id] [bigint] IDENTITY(1,1) NOT NULL,
+	[no_seri] [varchar](50) NOT NULL,
+	[type_service] [varchar](50) NULL,
+	[masa] [int] NULL,
+	[tgl_inst] [date] NULL,
+	[tgl_last_inst] [date] NULL,
+	[tgl_contract] [date] NULL,
+	[created_at] [datetime] NOT NULL,
+ CONSTRAINT [PK_VTK_Contract] PRIMARY KEY CLUSTERED 
+(
+	[id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[VTK_Contract] ADD  CONSTRAINT [DF_VTK_Contract_created_at]  DEFAULT (sysdatetime()) FOR [created_at]
+GO
+
+
+--------------- Users -------------------------
+USE [PJPNavisionExtension]
+GO
+
+/****** Object:  Table [dbo].[VTK_User]    Script Date: 09/06/2025 16.59.32 ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[VTK_User](
+	[id] [bigint] IDENTITY(1,1) NOT NULL,
+	[name] [varchar](50) NOT NULL,
+	[username] [varchar](50) NOT NULL,
+	[pass] [varchar](max) NOT NULL,
+	[pic] [varchar](max) NULL,
+	[reset_pass] [datetime] NULL,
+ CONSTRAINT [PK_VTK_User] PRIMARY KEY CLUSTERED 
+(
+	[id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY],
+ CONSTRAINT [IX_VTK_User] UNIQUE NONCLUSTERED 
+(
+	[username] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY] TEXTIMAGE_ON [PRIMARY]
+GO
+
+
