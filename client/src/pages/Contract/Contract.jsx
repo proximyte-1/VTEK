@@ -64,7 +64,7 @@ const Contract = () => {
             variant="contained"
             color="warning"
             sx={{ marginRight: 0.5 }}
-            onClick={() => navigate(`edit/id=${params.row.id}`)}
+            onClick={() => navigate(`edit/${params.row.id}`)}
           >
             Edit
           </Button>

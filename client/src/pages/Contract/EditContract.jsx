@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   TextField,
   Button,
@@ -10,19 +10,50 @@ import {
   Alert,
   Snackbar,
   CircularProgress,
-  Box,
+  InputLabel,
+  Select,
+  MenuItem,
 } from "@mui/material";
-import { schemaUsers, handleFileSelect } from "../../utils/helpers";
 import { useAlert } from "../../utils/alert";
 import { useNavigate, useParams } from "react-router-dom";
-import FileUpload from "../../components/FileUpload/FileUpload";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import axios from "axios";
+import * as yup from "yup";
+import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
+import { selectService } from "../../utils/constants";
+import dayjs from "dayjs";
 
 const EditContract = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+
+  const { alert, showAlert, closeAlert } = useAlert();
+  const [loading, setLoading] = useState(false);
+  const [lastCont, setLastCont] = useState();
+
+  const schema = useMemo(() => {
+    return yup.object().shape({
+      no_seri: yup.string().required(),
+      type_service: yup.string().required(),
+      masa: yup.number().required(),
+      tgl_inst: yup.date().required(),
+      tgl_contract: yup
+        .date()
+        .required("Required")
+        .test(
+          "after-last-contract",
+          `Tanggal Harus Setelah Kontrak Terakhir: ${
+            lastCont ? dayjs(lastCont).format("DD-MM-YYYY") : "N/A"
+          }`,
+          function (value) {
+            if (!lastCont || !value) return true;
+            return dayjs(value).isAfter(dayjs(lastCont), "day");
+          }
+        ),
+    });
+  }, [lastCont]);
 
   const {
     register,
@@ -34,38 +65,67 @@ const EditContract = () => {
     reset,
     formState: { errors },
   } = useForm({
-    resolver: yupResolver(schemaUsers),
-    context: { isEdit: true },
+    resolver: yupResolver(schema),
+    context: { isEdit: false },
     defaultValues: {
-      name: "",
-      username: "",
+      no_seri: "",
+      type_service: "",
+      masa: "",
+      tgl_inst: null,
+      // tgl_last_inst: "",
+      tgl_contract: null,
     },
   });
 
-  const handleFileSelect = (file) => {
-    setValue("pic", file, { shouldValidate: true });
-  };
-
-  const { alert, showAlert, closeAlert } = useAlert();
-  const [loading, setLoading] = useState(false);
+  const noSeri = watch("no_seri");
 
   useEffect(() => {
-    async function fetchDataUser() {
+    if (noSeri) {
+      axios
+        .get(
+          `${
+            import.meta.env.VITE_API_URL
+          }api/get-last-contract?no_seri=${noSeri}`
+        )
+        .then((res) => {
+          if (res.data.length === 0) {
+            setLastCont(null);
+          } else {
+            if (res.data.length === 2) {
+              const rawDate = res.data?.[0]?.tgl_contract;
+              const parsed = dayjs(rawDate);
+              setLastCont(parsed);
+            }
+          }
+        });
+    }
+  }, [noSeri]);
+
+  useEffect(() => {
+    const fetchContractById = async () => {
       try {
         const response = await axios.get(
-          `${import.meta.env.VITE_API_URL}api/get-users-by-id?${id}`
+          `${import.meta.env.VITE_API_URL}api/get-contract-by-id?id=${id}`
         );
 
         const data = response.data[0];
-        Object.entries(data).forEach(([key, value]) => {
-          setValue(key, value, { shouldDirty: true });
-        });
-      } catch (error) {
-        console.error("Error fetching Data User:", error);
-      }
-    }
 
-    fetchDataUser();
+        Object.entries(data).forEach(([key, value]) => {
+          let parsedValue = value;
+
+          if (["tgl_inst", "tgl_contract"].includes(key)) {
+            parsedValue = value ? dayjs(value) : null;
+          }
+
+          setValue(key, parsedValue, { shouldDirty: true });
+        });
+      } catch (err) {
+        console.error("No data found or is missing");
+        showAlert("Gagal mendapat data kontrak tidak ditemukan.", "error");
+      }
+    };
+
+    fetchContractById();
   }, []);
 
   const onSubmit = async (values) => {
@@ -80,17 +140,17 @@ const EditContract = () => {
 
       // Submit main form
       const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}api/edit-users?${id}`,
+        `${import.meta.env.VITE_API_URL}api/edit-contract?id=${id}`,
         data
       );
 
       if (!response.data.ok) {
-        throw new Error("Gagal menyimpan data user.");
+        throw new Error("Gagal mengubah data kontrak.");
       } else {
         setLoading(false);
-        navigate("/users", {
+        navigate("/contract", {
           state: {
-            message: "Data User Berhasil Ditambahkan!",
+            message: "Data Kontrak Berhasil Diubah!",
             severity: "success",
           },
         });
@@ -102,7 +162,7 @@ const EditContract = () => {
   };
 
   const onInvalid = (errors) => {
-    console.log("Form has errors:", errors);
+    // console.log("Form has errors:", errors);
   };
 
   // Theme and media query for responsiveness
@@ -112,89 +172,156 @@ const EditContract = () => {
   return (
     <Paper sx={{ padding: 3 }} elevation={4}>
       <Typography variant="h5" marginBottom={"1.5em"} gutterBottom>
-        Edit User
+        Edit Kontrak
       </Typography>
-      <form
-        onSubmit={handleSubmit(onSubmit, onInvalid)}
-        encType="multipart/form-data"
-      >
-        <Grid container spacing={5} marginY={"2em"} alignItems="center">
-          <Grid size={{ xs: 12, md: 6 }}>
-            <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="name">
-              Nama
-            </Typography>
-            <TextField
-              variant="outlined"
-              fullWidth
-              {...register("name")}
-              error={!!errors.name}
-              helperText={errors.name?.message}
-            />
-          </Grid>
-
-          <Grid size={{ xs: 12, md: 6 }}>
-            <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="username">
-              Username
-            </Typography>
-            <TextField
-              variant="outlined"
-              fullWidth
-              {...register("username")}
-              error={!!errors.username}
-              helperText={errors.username?.message}
-            />
-          </Grid>
-
-          <Grid size={{ xs: 12, md: 12 }}>
-            {/* Upload */}
-            <Box sx={{ width: "100%", overflowX: "auto" }}>
-              <Box>
-                <FileUpload
-                  onFileSelect={handleFileSelect}
-                  onError={(msg) => (msg ? showAlert(msg, "error") : null)}
-                />
-              </Box>
-            </Box>
-          </Grid>
-        </Grid>
-
-        {/* Alert notifications */}
-        <Snackbar
-          open={alert.open}
-          autoHideDuration={5000}
-          onClose={closeAlert}
-          anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+      <LocalizationProvider dateAdapter={AdapterDayjs}>
+        <form
+          onSubmit={handleSubmit(onSubmit, onInvalid)}
+          encType="multipart/form-data"
         >
-          <Alert
-            onClose={closeAlert}
-            variant="filled"
-            severity={alert.severity}
-            fontSize="inherit"
-            sx={{ width: "100%" }}
-          >
-            {alert.message}
-          </Alert>
-        </Snackbar>
+          <Grid container spacing={5} marginY={"2em"} alignItems="center">
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="no_seri">
+                No. Seri
+              </Typography>
+              <TextField
+                variant="outlined"
+                fullWidth
+                {...register("no_seri")}
+                error={!!errors.no_seri}
+                helperText={errors.no_seri?.message}
+              />
+            </Grid>
 
-        <Grid container spacing={5}>
-          {/* Submit Button */}
-          <Grid size={{ xs: 12, md: 12 }}>
-            <Button
-              type="submit"
-              variant="contained"
-              color="primary"
-              disabled={loading}
-              sx={{ width: isSmallScreen ? "100%" : "auto" }}
-            >
-              {loading ? (
-                <CircularProgress size={20} color="inherit" />
-              ) : (
-                "Submit"
-              )}
-            </Button>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
+                Tipe Service
+              </Typography>
+              <Controller
+                name="type_service"
+                control={control}
+                render={({ field }) => (
+                  <Select {...field} variant="outlined" fullWidth>
+                    <MenuItem disabled value="">
+                      <em>Pilih Tipe Service</em>
+                    </MenuItem>
+                    {Object.entries(selectService).map(([value, label]) => (
+                      <MenuItem key={value} value={value}>
+                        {label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                )}
+              />
+            </Grid>
+
+            <Grid size={{ xs: 12, md: 6 }}>
+              <InputLabel id="tgl_inst">Tanggal Instalasi</InputLabel>
+              <Controller
+                name="tgl_inst"
+                control={control}
+                render={({ field }) => (
+                  <DatePicker
+                    {...field}
+                    slotProps={{
+                      textField: {
+                        fullWidth: true,
+                        error: !!errors.tgl_inst,
+                        helperText: errors.tgl_inst?.message,
+                      },
+                    }}
+                  />
+                )}
+              />
+            </Grid>
+
+            <Grid size={{ xs: 12, md: 6 }}>
+              <InputLabel id="tgl_contract">Tanggal Kontrak</InputLabel>
+              <Controller
+                name="tgl_contract"
+                control={control}
+                render={({ field }) => (
+                  <DatePicker
+                    {...field}
+                    onChange={(newValue) => {
+                      if (!(newValue <= lastCont)) {
+                        setValue("tgl_contract", newValue);
+                      } else {
+                        showAlert(
+                          `Tanggal Harus Setelah Kontrak Terakhir: ${
+                            lastCont
+                              ? dayjs(lastCont).format("DD-MM-YYYY")
+                              : "N/A"
+                          }`,
+                          "error"
+                        );
+                      }
+                    }}
+                    slotProps={{
+                      textField: {
+                        fullWidth: true,
+                        error: !!errors.tgl_contract,
+                        helperText: errors.tgl_contract?.message,
+                      },
+                    }}
+                  />
+                )}
+              />
+            </Grid>
+
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="masa">
+                Masa (Tahun)
+              </Typography>
+              <TextField
+                variant="outlined"
+                fullWidth
+                type="number"
+                {...register("masa")}
+                error={!!errors.masa}
+                helperText={errors.masa?.message}
+              />
+            </Grid>
           </Grid>
-        </Grid>
-      </form>
+
+          {/* Alert notifications */}
+          <Snackbar
+            open={alert.open}
+            autoHideDuration={5000}
+            onClose={closeAlert}
+            anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+          >
+            <Alert
+              onClose={closeAlert}
+              variant="filled"
+              severity={alert.severity}
+              fontSize="inherit"
+              sx={{ width: "100%" }}
+            >
+              {alert.message}
+            </Alert>
+          </Snackbar>
+
+          <Grid container spacing={5}>
+            {/* Submit Button */}
+            <Grid size={{ xs: 12, md: 12 }}>
+              <Button
+                type="submit"
+                variant="contained"
+                color="primary"
+                disabled={loading}
+                sx={{ width: isSmallScreen ? "100%" : "auto" }}
+              >
+                {loading ? (
+                  <CircularProgress size={20} color="inherit" />
+                ) : (
+                  "Submit"
+                )}
+              </Button>
+            </Grid>
+          </Grid>
+        </form>
+      </LocalizationProvider>
     </Paper>
   );
 };

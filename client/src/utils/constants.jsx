@@ -30,8 +30,8 @@ export const selectStatusResult = {
 };
 
 export const selectService = {
-  OK: "OK",
-  CONT: "Continue",
-  TS: "Technical Support",
-  SS: "Software Support",
+  GR: "Garansi",
+  KS: "Kontrak Service",
+  TST: "Tunjangan Service Total",
+  RT: "Rental",
 };

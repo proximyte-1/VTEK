@@ -227,10 +227,12 @@ app.get("/api/get-no-rep", async (req, res) => {
   }
 });
 
-app.get("/api/get-users", async (req, res) => {
+app.get("/api/get-last-service", async (req, res) => {
+  const { no_seri } = req.query;
+
   try {
     const result = await pool.query(
-      `SELECT * FROM dbo.${process.env.TABLE_USER}`
+      `SELECT no_seri, waktu_selesai, count_bw, count_cl FROM dbo.${process.env.TABLE_LK} WHERE no_seri = '${no_seri}' ORDER BY waktu_selesai DESC`
     );
     res.json(result.recordset);
   } catch (err) {
@@ -238,37 +240,7 @@ app.get("/api/get-users", async (req, res) => {
   }
 });
 
-app.get("/api/get-users-by-id", async (req, res) => {
-  const { id = "" } = req.query;
-
-  try {
-    const result = await pool.query(
-      `SELECT * FROM dbo.${process.env.TABLE_USER} WHERE id = '${id}'`
-    );
-    res.json(result.recordset);
-  } catch (err) {
-    res.status(500).json({ error: "Database error" });
-  }
-});
-
-app.get("/api/reset-pass", async (req, res) => {
-  const { id = "" } = req.query;
-  const now = formatDateForSQL(dayjs());
-
-  try {
-    const result = await pool.query(
-      `UPDATE dbo.${process.env.TABLE_USER} SET reset_pass = '${now}' WHERE id = ${id}`
-    );
-
-    res.json({
-      ok: true,
-      message: "Berhasil",
-    });
-  } catch (err) {
-    res.status(500).json({ error: "Database error" });
-  }
-});
-
+// === HIT NAVISION ===
 app.get("/api/nav-data", (req, res) => {
   const id = "SPGFI" + req.query.id;
   const navURL = process.env.NAV_WS_URL + navFilterEncode("FGINO", id);
@@ -295,7 +267,7 @@ app.get("/api/nav", (req, res) => {
   });
 });
 
-// === POST Routes ===
+// ==== FLK CRUD ====
 app.post("/api/create-flk", upload.single("pic"), async (req, res) => {
   try {
     const fields = req.body;
@@ -367,7 +339,6 @@ app.post("/api/create-flk", upload.single("pic"), async (req, res) => {
   }
 });
 
-// === POST: Create Barang ===
 app.post("/api/create-brg", async (req, res) => {
   const { no_lk, items } = req.body;
 
@@ -396,7 +367,6 @@ app.post("/api/create-brg", async (req, res) => {
   }
 });
 
-// === POST: Edit FLK by ID ===
 app.post("/api/edit-flk", upload.single("pic"), async (req, res) => {
   try {
     const { id } = req.query;
@@ -480,6 +450,7 @@ app.post("/api/edit-flk", upload.single("pic"), async (req, res) => {
   }
 });
 
+// ==== EXPORT ====
 app.post("/api/export-data", async (req, res) => {
   try {
     const { dari, sampai, jenis, no_cus, no_seri } = req.body;
@@ -533,7 +504,6 @@ app.post("/api/export-data", async (req, res) => {
   return;
 });
 
-// === POST: Export to Excel ===
 app.post("/api/export-excel", async (req, res) => {
   try {
     const { data: data, reportTitle, columns } = req.body;
@@ -760,7 +730,7 @@ app.post("/api/export-excel", async (req, res) => {
   }
 });
 
-// USERS CRUD
+// ==== USER CRUD ====
 app.post("/api/create-users", upload.single("pic"), async (req, res) => {
   const { name, username, pass } = req.body;
   let filePath = null;
@@ -813,15 +783,70 @@ app.post("/api/edit-users", upload.single("pic"), async (req, res) => {
   }
 });
 
-// CONTRACT CRUD
-app.get("/api/get-last-contract", async (req, res) => {
-  const { no_seri } = req.query;
+app.get("/api/get-users", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_USER}`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
 
-  console.log(no_seri);
+app.get("/api/get-users-by-id", async (req, res) => {
+  const { id = "" } = req.query;
 
   try {
     const result = await pool.query(
-      `SELECT TOP 1 tgl_contract FROM dbo.${process.env.TABLE_CONTRACT} WHERE no_seri = '${no_seri}' ORDER BY tgl_contract DESC`
+      `SELECT * FROM dbo.${process.env.TABLE_USER} WHERE id = '${id}'`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/reset-pass", async (req, res) => {
+  const { id = "" } = req.query;
+  const now = formatDateForSQL(dayjs());
+
+  try {
+    const result = await pool.query(
+      `UPDATE dbo.${process.env.TABLE_USER} SET reset_pass = '${now}' WHERE id = ${id}`
+    );
+
+    res.json({
+      ok: true,
+      message: "Berhasil",
+    });
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// ==== CONTRACT CRUD ====
+app.get("/api/get-last-contract", async (req, res) => {
+  const { no_seri } = req.query;
+
+  try {
+    const result = await pool.query(
+      `SELECT TOP 2 id, tgl_contract FROM dbo.${process.env.TABLE_CONTRACT} WHERE no_seri = '${no_seri}' ORDER BY tgl_contract DESC`
+    );
+
+    console.log(result);
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/get-contract-by-id", async (req, res) => {
+  const { id } = req.query;
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_CONTRACT} WHERE id = '${id}'`
     );
 
     console.log(result);
@@ -856,6 +881,28 @@ app.post("/api/create-contract", upload.none(), async (req, res) => {
 
     const result = await pool.query(query);
     res.json({ ok: true, message: "Contract inserted" });
+  } catch (err) {
+    console.error(err);
+    res
+      .status(500)
+      .json({ ok: false, message: "Insert failed", error: err.message });
+  }
+});
+
+app.post("/api/edit-contract", upload.none(), async (req, res) => {
+  const { id } = req.query;
+  const { no_seri, tgl_inst, tgl_contract, type_service, masa } = req.body;
+
+  try {
+    const inst = formatDateForSQL(tgl_inst);
+    const contract = formatDateForSQL(tgl_contract);
+
+    const query = `
+      UPDATE dbo.${process.env.TABLE_CONTRACT} SET no_seri = '${no_seri}', tgl_inst = '${inst}', tgl_last_inst = '${inst}', tgl_contract = '${contract}', type_service = '${type_service}', masa = '${masa}' WHERE id = ${id}
+    `;
+
+    const result = await pool.query(query);
+    res.json({ ok: true, message: "Contract updated" });
   } catch (err) {
     console.error(err);
     res

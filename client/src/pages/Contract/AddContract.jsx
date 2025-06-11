@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   TextField,
   Button,
@@ -10,29 +10,49 @@ import {
   Alert,
   Snackbar,
   CircularProgress,
-  Box,
   InputLabel,
   Select,
   MenuItem,
 } from "@mui/material";
-import { schemaContract, schemaUsers } from "../../utils/helpers";
 import { useAlert } from "../../utils/alert";
 import { useNavigate } from "react-router-dom";
-import FileUpload from "../../components/FileUpload/FileUpload";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import axios from "axios";
 import dayjs from "dayjs";
-import {
-  DateCalendar,
-  DatePicker,
-  LocalizationProvider,
-} from "@mui/x-date-pickers";
+import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { selectService } from "../../utils/constants";
+import * as yup from "yup";
 
 const AddContract = () => {
   const navigate = useNavigate();
+
+  const { alert, showAlert, closeAlert } = useAlert();
+  const [loading, setLoading] = useState(false);
+  const [lastCont, setLastCont] = useState();
+
+  const schema = useMemo(() => {
+    return yup.object().shape({
+      no_seri: yup.string().required(),
+      type_service: yup.string().required(),
+      masa: yup.number().required(),
+      tgl_inst: yup.date().required(),
+      tgl_contract: yup
+        .date()
+        .required("Required")
+        .test(
+          "after-last-contract",
+          `Tanggal Harus Setelah Kontrak Terakhir: ${
+            lastCont ? dayjs(lastCont).format("DD-MM-YYYY") : "N/A"
+          }`,
+          function (value) {
+            if (!lastCont || !value) return true;
+            return dayjs(value).isAfter(dayjs(lastCont), "day");
+          }
+        ),
+    });
+  }, [lastCont]);
 
   const {
     register,
@@ -44,7 +64,7 @@ const AddContract = () => {
     reset,
     formState: { errors },
   } = useForm({
-    resolver: yupResolver(schemaContract),
+    resolver: yupResolver(schema),
     context: { isEdit: false },
     defaultValues: {
       no_seri: "",
@@ -56,52 +76,31 @@ const AddContract = () => {
     },
   });
 
-  const { alert, showAlert, closeAlert } = useAlert();
-  const [loading, setLoading] = useState(false);
-  const [lastCont, setLastCont] = useState();
+  const noSeri = watch("no_seri");
 
-  const validContract = async (no_seri, tgl_contract) => {
-    try {
-      const response = await axios.get(
-        `${
-          import.meta.env.VITE_API_URL
-        }api/get-last-contract?no_seri=${no_seri}`
-      );
-
-      const data = response.data[0];
-
-      if (response.data.ok) {
-        if (tgl_contract < data.tgl_contract) {
-          console.log(data.tgl_contract);
-          return false;
-        } else {
-          return true;
-        }
-      } else {
-        new Error();
-      }
-    } catch (err) {
-      console.error("Failed to check last contract.");
+  useEffect(() => {
+    if (noSeri) {
+      axios
+        .get(
+          `${
+            import.meta.env.VITE_API_URL
+          }api/get-last-contract?no_seri=${noSeri}`
+        )
+        .then((res) => {
+          if (res.data.length === 0) {
+            setLastCont(null);
+          } else {
+            const rawDate = res.data?.[0]?.tgl_contract;
+            const parsed = dayjs(rawDate);
+            setLastCont(parsed);
+          }
+        });
     }
-  };
+  }, [noSeri]);
 
   const onSubmit = async (values) => {
-    // setLoading(true);
+    setLoading(true);
     try {
-      const valid = await validContract(
-        getValues("no_seri"),
-        getValues("tgl_contract")
-      );
-
-      if (!valid) {
-        showAlert(
-          "Tanggal Kontrak Tidak Boleh Sebelum Kontrak Sebelumnya.",
-          "error"
-        );
-        setLoading(false);
-        return;
-      }
-
       const data = new FormData();
 
       // Append all fields except special ones
@@ -218,11 +217,15 @@ const AddContract = () => {
                   <DatePicker
                     {...field}
                     onChange={(newValue) => {
-                      if (!(newValue < lastCont)) {
+                      if (!(newValue <= lastCont)) {
                         setValue("tgl_contract", newValue);
                       } else {
                         showAlert(
-                          "Tanggal Kontrak Tidak Boleh Sebelum Kontrak Sebelumnya.",
+                          `Tanggal Harus Setelah Kontrak Terakhir: ${
+                            lastCont
+                              ? dayjs(lastCont).format("DD-MM-YYYY")
+                              : "N/A"
+                          }`,
                           "error"
                         );
                       }
