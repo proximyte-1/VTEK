@@ -1,3 +1,4 @@
+import dayjs from "dayjs";
 import * as yup from "yup";
 
 export const columnsBarang = [
@@ -13,19 +14,19 @@ export const columnsBarang = [
     field: "kode_part",
     headerName: "Kode Part",
     flex: 1,
-    renderCell: ({ row }) => <div>{row["d:ItemNo"]}</div>,
+    renderCell: ({ row }) => <div>{displayValue(row["d:ItemNo"])}</div>,
   },
   {
     field: "nama_part",
     headerName: "Nama Part",
     flex: 1,
-    renderCell: ({ row }) => <div>{row["d:Description"]}</div>,
+    renderCell: ({ row }) => <div>{displayValue(row["d:Description"])}</div>,
   },
   {
     field: "quantity",
     headerName: "Quantity",
     flex: 1,
-    renderCell: ({ row }) => <div>{row["d:Quantity"]?._}</div>,
+    renderCell: ({ row }) => <div>{displayValue(row["d:Quantity"])}</div>,
   },
 ];
 
@@ -117,10 +118,34 @@ export const schemaUsers = yup.object().shape({
 });
 
 export const displayValue = (data) => {
-  if (typeof data === "string") return data.trim();
-  if (typeof data === "object" && "_" in data) return String(data._).trim();
-  if (data === null || data === undefined || data == "") return "-";
+  if (data === null || data === undefined || data === "") return "-";
+
+  // Handle object with `_` field (common in SOAP/XML JSON)
+  if (typeof data === "object" && "_" in data) {
+    return String(data._).trim();
+  }
+
+  // Handle string or number
+  if (typeof data === "string" || typeof data === "number") {
+    return String(data).trim();
+  }
+
+  // Fallback for other objects (e.g., nested structures)
   return "-";
+};
+
+export const displayFormatDate = (data) => {
+  if (!data) return "-";
+
+  const date = dayjs(data);
+
+  if (!date.isValid()) return "-";
+
+  // If time is 00:00, treat it as date-only
+  const hasTime =
+    date.hour() !== 0 || date.minute() !== 0 || date.second() !== 0;
+
+  return hasTime ? date.format("DD-MM-YYYY HH:mm") : date.format("DD-MM-YYYY");
 };
 
 export const handleFileSelect = (file) => {

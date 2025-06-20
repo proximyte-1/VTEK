@@ -16,6 +16,11 @@ import EditUsers from "./pages/Users/EditUsers";
 import Contract from "./pages/Contract/Contract";
 import AddContract from "./pages/Contract/AddContract";
 import EditContract from "./pages/Contract/EditContract";
+import Instalasi from "./pages/Instalasi/Instalasi";
+import AddInstalasi from "./pages/Instalasi/AddInstalasi";
+import EditInstalasi from "./pages/Instalasi/EditInstalasi";
+import Login from "./pages/Auth/Login";
+import Dashboard from "./pages/Auth/Dashboard";
 
 function App() {
   return (
@@ -50,6 +55,17 @@ function App() {
             <Route path="add" element={<AddContract />} />
             <Route path="edit/:id" element={<EditContract />} />
           </Route>
+
+          {/* Instalasi Group */}
+          <Route path="instalasi">
+            <Route index element={<Instalasi />} />
+            <Route path="add" element={<AddInstalasi />} />
+            <Route path="edit/:id" element={<EditInstalasi />} />
+          </Route>
+
+          {/* Login / Auth Group */}
+          <Route path="login" element={<Login />} />
+          <Route path="dashboard" element={<Dashboard />} />
 
           {/* Admin Group */}
           {/* <Route path="admin" element={<Layout />}>

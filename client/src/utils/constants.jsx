@@ -1,3 +1,5 @@
+import dayjs from "dayjs";
+
 export const selectStatusCall = {
   GR: "Garansi",
   KS: "Kontrak Servis",
@@ -34,4 +36,13 @@ export const selectService = {
   KS: "Kontrak Service",
   TST: "Tunjangan Service Total",
   RT: "Rental",
+  Chrg: "Charge",
 };
+
+// Set limits from env variables
+const maxBackdateDays = Number(import.meta.env.VITE_BACKDATE_DAYS || 0);
+const maxForwardDays = Number(Math.abs(import.meta.env.VITE_FORWARD_DAYS) || 0);
+
+export const now = dayjs();
+export const minDateTime = now.subtract(maxBackdateDays, "day");
+export const maxDateTime = now.add(maxForwardDays, "day");

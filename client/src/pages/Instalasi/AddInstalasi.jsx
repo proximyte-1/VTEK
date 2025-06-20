@@ -25,33 +25,26 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { selectService } from "../../utils/constants";
 import * as yup from "yup";
 
-const AddContract = () => {
+const AddInstalasi = () => {
   const navigate = useNavigate();
 
   const { alert, showAlert, closeAlert } = useAlert();
   const [loading, setLoading] = useState(false);
-  const [lastCont, setLastCont] = useState();
+  const [idCont, setIdCont] = useState();
 
   const schema = useMemo(() => {
     return yup.object().shape({
-      no_seri: yup.string().required(),
-      type_service: yup.string().required(),
-      masa: yup.number().required(),
-      tgl_contract: yup
-        .date()
-        .required("Required")
-        .test(
-          "after-last-contract",
-          `Tanggal Harus Setelah Kontrak Terakhir: ${
-            lastCont ? dayjs(lastCont).format("DD-MM-YYYY") : "N/A"
-          }`,
-          function (value) {
-            if (!lastCont || !value) return true;
-            return dayjs(value).isAfter(dayjs(lastCont), "day");
-          }
-        ),
+      id_kontrak: yup
+        .string()
+        .required()
+        .test("id-exists", "No Kontrak Tidak Ditemukan", function (value) {
+          if (!value || !idCont) return false;
+          return idCont.some((item) => item.id === value);
+        }),
+      tgl_instalasi: yup.date().required(),
+      lokasi: yup.string().required(),
     });
-  }, [lastCont]);
+  }, [idCont]);
 
   const {
     register,
@@ -66,34 +59,30 @@ const AddContract = () => {
     resolver: yupResolver(schema),
     context: { isEdit: false },
     defaultValues: {
-      no_seri: "",
-      type_service: "",
-      masa: "",
-      tgl_contract: null,
+      id_kontrak: "",
+      tgl_instalasi: null,
+      lokasi: "",
     },
   });
 
-  const noSeri = watch("no_seri");
-
   useEffect(() => {
-    if (noSeri) {
+    try {
       axios
-        .get(
-          `${
-            import.meta.env.VITE_API_URL
-          }api/get-last-contract?no_seri=${noSeri}`
-        )
+        .get(`${import.meta.env.VITE_API_URL}api/get-id-contract`)
         .then((res) => {
+          console.log(res);
           if (res.data.length === 0) {
-            setLastCont(null);
+            setIdCont(null);
           } else {
-            const rawDate = res.data?.[0]?.tgl_contract;
-            const parsed = dayjs(rawDate);
-            setLastCont(parsed);
+            const data = res.data;
+            setIdCont(data);
           }
         });
+    } catch (err) {
+      console.error("Terjadi kesalahan saat memanggil data: ", err);
+      showAlert("Terjadi kesalahan saat memanggil data", "error");
     }
-  }, [noSeri]);
+  }, []);
 
   const onSubmit = async (values) => {
     setLoading(true);
@@ -107,17 +96,17 @@ const AddContract = () => {
 
       // Submit main form
       const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}api/create-contract`,
+        `${import.meta.env.VITE_API_URL}api/create-instalasi`,
         data
       );
 
       if (!response.data.ok) {
-        throw new Error("Gagal menyimpan data kontrak.");
+        throw new Error("Gagal menyimpan data instalasi.");
       } else {
         setLoading(false);
-        navigate("/contract", {
+        navigate("/instalasi", {
           state: {
-            message: "Data Kontrak Berhasil Ditambahkan!",
+            message: "Data instalasi Berhasil Ditambahkan!",
             severity: "success",
           },
         });
@@ -139,7 +128,7 @@ const AddContract = () => {
   return (
     <Paper sx={{ padding: 3 }} elevation={4}>
       <Typography variant="h5" marginBottom={"1.5em"} gutterBottom>
-        New Kontrak
+        New Instalasi
       </Typography>
       <LocalizationProvider dateAdapter={AdapterDayjs}>
         <form
@@ -148,68 +137,35 @@ const AddContract = () => {
         >
           <Grid container spacing={5} marginY={"2em"} alignItems="center">
             <Grid size={{ xs: 12, md: 6 }}>
-              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="no_seri">
-                No. Seri
+              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="id_kontrak">
+                No. Kontrak
               </Typography>
               <TextField
                 variant="outlined"
                 fullWidth
-                {...register("no_seri")}
-                error={!!errors.no_seri}
-                helperText={errors.no_seri?.message}
+                {...register("id_kontrak")}
+                error={!!errors.id_kontrak}
+                helperText={errors.id_kontrak?.message}
               />
             </Grid>
 
             <Grid size={{ xs: 12, md: 6 }}>
-              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
-                Tipe Service
-              </Typography>
+              <InputLabel id="tgl_instalasi">Tanggal Instalasi</InputLabel>
               <Controller
-                name="type_service"
-                control={control}
-                render={({ field }) => (
-                  <Select {...field} variant="outlined" fullWidth>
-                    <MenuItem disabled value="">
-                      <em>Pilih Tipe Service</em>
-                    </MenuItem>
-                    {Object.entries(selectService).map(([value, label]) => (
-                      <MenuItem key={value} value={value}>
-                        {label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                )}
-              />
-            </Grid>
-
-            <Grid size={{ xs: 12, md: 6 }}>
-              <InputLabel id="tgl_contract">Tanggal Kontrak</InputLabel>
-              <Controller
-                name="tgl_contract"
+                name="tgl_instalasi"
                 control={control}
                 render={({ field }) => (
                   <DatePicker
                     {...field}
+                    // onChange={(newValue) =>
+                    //   handleDateChange("waktu_sampai", newValue)
+                    // }
                     format="DD-MM-YYYY"
-                    onChange={(newValue) => {
-                      if (!(newValue <= lastCont)) {
-                        setValue("tgl_contract", newValue);
-                      } else {
-                        showAlert(
-                          `Tanggal Harus Setelah Kontrak Terakhir: ${
-                            lastCont
-                              ? dayjs(lastCont).format("DD-MM-YYYY")
-                              : "N/A"
-                          }`,
-                          "error"
-                        );
-                      }
-                    }}
                     slotProps={{
                       textField: {
                         fullWidth: true,
-                        error: !!errors.tgl_contract,
-                        helperText: errors.tgl_contract?.message,
+                        error: !!errors.tgl_instalasi,
+                        helperText: errors.tgl_instalasi?.message,
                       },
                     }}
                   />
@@ -218,16 +174,17 @@ const AddContract = () => {
             </Grid>
 
             <Grid size={{ xs: 12, md: 6 }}>
-              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="masa">
-                Masa (Tahun)
+              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="lokasi">
+                Lokasi
               </Typography>
               <TextField
                 variant="outlined"
                 fullWidth
-                type="number"
-                {...register("masa")}
-                error={!!errors.masa}
-                helperText={errors.masa?.message}
+                multiline
+                rows={3}
+                {...register("lokasi")}
+                error={!!errors.lokasi}
+                helperText={errors.lokasi?.message}
               />
             </Grid>
           </Grid>
@@ -274,4 +231,4 @@ const AddContract = () => {
   );
 };
 
-export default AddContract;
+export default AddInstalasi;

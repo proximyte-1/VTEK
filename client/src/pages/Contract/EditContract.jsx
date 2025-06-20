@@ -38,7 +38,6 @@ const EditContract = () => {
       no_seri: yup.string().required(),
       type_service: yup.string().required(),
       masa: yup.number().required(),
-      tgl_inst: yup.date().required(),
       tgl_contract: yup
         .date()
         .required("Required")
@@ -71,8 +70,6 @@ const EditContract = () => {
       no_seri: "",
       type_service: "",
       masa: "",
-      tgl_inst: null,
-      // tgl_last_inst: "",
       tgl_contract: null,
     },
   });
@@ -113,7 +110,7 @@ const EditContract = () => {
         Object.entries(data).forEach(([key, value]) => {
           let parsedValue = value;
 
-          if (["tgl_inst", "tgl_contract"].includes(key)) {
+          if (["tgl_contract"].includes(key)) {
             parsedValue = value ? dayjs(value) : null;
           }
 
@@ -216,26 +213,6 @@ const EditContract = () => {
             </Grid>
 
             <Grid size={{ xs: 12, md: 6 }}>
-              <InputLabel id="tgl_inst">Tanggal Instalasi</InputLabel>
-              <Controller
-                name="tgl_inst"
-                control={control}
-                render={({ field }) => (
-                  <DatePicker
-                    {...field}
-                    slotProps={{
-                      textField: {
-                        fullWidth: true,
-                        error: !!errors.tgl_inst,
-                        helperText: errors.tgl_inst?.message,
-                      },
-                    }}
-                  />
-                )}
-              />
-            </Grid>
-
-            <Grid size={{ xs: 12, md: 6 }}>
               <InputLabel id="tgl_contract">Tanggal Kontrak</InputLabel>
               <Controller
                 name="tgl_contract"
@@ -243,6 +220,7 @@ const EditContract = () => {
                 render={({ field }) => (
                   <DatePicker
                     {...field}
+                    format="DD-MM-YYYY"
                     onChange={(newValue) => {
                       if (!(newValue <= lastCont)) {
                         setValue("tgl_contract", newValue);

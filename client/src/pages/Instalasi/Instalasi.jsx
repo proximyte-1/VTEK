@@ -14,7 +14,7 @@ import { useAlert } from "../../utils/alert";
 import { Margin } from "@mui/icons-material";
 import dayjs from "dayjs";
 
-const Contract = () => {
+const Instalasi = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -27,17 +27,15 @@ const Contract = () => {
         return params.api.getAllRowIds().indexOf(params.id) + 1;
       },
     },
-    { field: "id", headerName: "No. Kontrak", flex: 1 },
-    { field: "no_seri", headerName: "No. Seri", flex: 1 },
-    { field: "type_service", headerName: "Tipe Service", flex: 1 },
-    { field: "masa", headerName: "Masa (Tahun)", flex: 1 },
+    { field: "id_kontrak", headerName: "No. Kontrak", flex: 1 },
     {
-      field: "tgl_contract",
-      headerName: "Tanggal Kontrak",
+      field: "tgl_instalasi",
+      headerName: "Tanggal Instalasi",
       flex: 1,
       renderCell: (params) =>
         params.value ? dayjs(params.value).format("DD-MM-YYYY") : "-",
     },
+    { field: "lokasi", headerName: "Lokasi", flex: 1 },
     {
       field: "actions",
       headerName: "Actions",
@@ -68,12 +66,12 @@ const Contract = () => {
     async function fetchContract() {
       try {
         const response = await axios.get(
-          import.meta.env.VITE_API_URL + `api/get-contract`
+          import.meta.env.VITE_API_URL + `api/get-instalasi`
         );
 
         setDatas(response.data);
       } catch (error) {
-        console.error("Error fetching contract:", error);
+        console.error("Error fetching instalasi:", error);
       }
     }
 
@@ -87,7 +85,7 @@ const Contract = () => {
   return (
     <Container>
       <Typography variant="h4" gutterBottom>
-        Master Kontrak
+        Master Instalasi
       </Typography>
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Box sx={{ minWidth: 700 }}>
@@ -138,4 +136,4 @@ const Contract = () => {
   );
 };
 
-export default Contract;
+export default Instalasi;

@@ -78,6 +78,7 @@ const Edit = () => {
       count_cl: "",
       saran: "",
       status_res: "",
+      no_fd: "",
       rep_ke: 0,
       pic: null,
     },
@@ -319,7 +320,6 @@ const Edit = () => {
                       </Grid>
                       {/* Row 2 */}
                       <Grid size={{ xs: 12, md: 6 }}>
-                        <Typography>No. Seri :</Typography>
                         <Grid>
                           <Typography>Kode Area :</Typography>
                           <Typography>Group :</Typography>
@@ -374,6 +374,61 @@ const Edit = () => {
                         <Typography>Type Service :</Typography>
                         <Typography>Masa :</Typography>
                         <Typography>Tanggal Akhir Service :</Typography>
+                      </Grid>
+                    </Grid>
+                  </AccordionDetails>
+                </Accordion>
+              </Grid>
+
+              {/* Accordion 2.5  */}
+              <Grid size={12}>
+                <Accordion
+                  expanded={!expand}
+                  disabled={!searched || !getValues("no_rep")}
+                >
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreRounded />}
+                    aria-controls="panel1-content"
+                    id="panel1-header"
+                  >
+                    <Typography component="span" variant="h5">
+                      Detail Laporan
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Grid container spacing={5}>
+                      <Grid size={{ xs: 12, md: 6 }}>
+                        <Typography
+                          sx={{ color: "rgba(0, 0, 0, 0.6)" }}
+                          id="no_lap"
+                        >
+                          No. Laporan
+                        </Typography>
+                        <TextField
+                          variant="outlined"
+                          type="number"
+                          fullWidth
+                          {...register("no_lap")}
+                          error={!!errors.no_lap}
+                          helperText={errors.no_lap?.message}
+                        />
+                      </Grid>
+
+                      <Grid size={{ xs: 12, md: 6 }}>
+                        <Typography
+                          sx={{ color: "rgba(0, 0, 0, 0.6)" }}
+                          id="no_fd"
+                        >
+                          No. FreshDesk
+                        </Typography>
+                        <TextField
+                          variant="outlined"
+                          type="number"
+                          fullWidth
+                          {...register("no_fd")}
+                          error={!!errors.no_fd}
+                          helperText={errors.no_fd?.message}
+                        />
                       </Grid>
                     </Grid>
                   </AccordionDetails>
@@ -707,6 +762,40 @@ const Edit = () => {
                             <DateTimePicker
                               ampm={false}
                               {...field}
+                              onChange={(newValue) => {
+                                const now = dayjs();
+                                const diffInDays = now.diff(
+                                  dayjs(newValue),
+                                  "day"
+                                );
+
+                                if (
+                                  diffInDays < import.meta.env.VITE_FORWARD_DAYS
+                                ) {
+                                  showAlert(
+                                    `Waktu tidak boleh lebih dari ${
+                                      import.meta.env.VITE_FORWARD_DAYS
+                                    } hari ke depan.`,
+                                    "error"
+                                  );
+                                  return;
+                                }
+
+                                if (
+                                  diffInDays >
+                                  import.meta.env.VITE_BACKDATE_DAYS
+                                ) {
+                                  showAlert(
+                                    `Waktu tidak boleh lebih dari ${
+                                      import.meta.env.VITE_BACKDATE_DAYS
+                                    } hari ke belakang.`,
+                                    "error"
+                                  );
+                                  return;
+                                }
+
+                                field.onChange(newValue); // still update the form
+                              }}
                               slotProps={{
                                 textField: {
                                   fullWidth: true,

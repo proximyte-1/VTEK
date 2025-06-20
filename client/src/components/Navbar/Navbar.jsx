@@ -21,6 +21,7 @@ const pages = [
   { endpoint: "master", name: "Master" },
   { endpoint: "flk", name: "Laporan Kerja" },
   { endpoint: "report", name: "Report" },
+  { endpoint: "login", name: "Login" },
 ];
 const settings = ["Profile", "Logout"];
 const menu_flk = [
@@ -30,6 +31,8 @@ const menu_flk = [
 const menu_master = [
   { name: "User", endpoint: "/users" },
   { name: "Kontrak", endpoint: "/contract" },
+  { name: "Instalasi", endpoint: "/instalasi" },
+  { name: "Area dan Teknisi", endpoint: "/area" },
   { name: "Global Settings", endpoint: "/settings" },
 ];
 
@@ -236,6 +239,8 @@ function Navbar() {
               ))}
             </Menu>
           </Box>
+
+          <Button>Login</Button>
 
           <Box sx={{ flexGrow: 0 }}>
             <Tooltip title="Open settings">

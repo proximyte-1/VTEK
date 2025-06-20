@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   TextField,
   Button,
@@ -25,8 +25,14 @@ import {
   selectKeluhan,
   selectProblem,
   selectStatusResult,
+  minDateTime,
+  maxDateTime,
 } from "../utils/constants";
-import { displayValue, columnsBarang, schemaNoRep } from "../utils/helpers";
+import {
+  displayValue,
+  columnsBarang,
+  displayFormatDate,
+} from "../utils/helpers";
 import { useAlert } from "../utils/alert";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
@@ -39,10 +45,109 @@ import NumberFormatTextField from "../components/NumberFormatTextField/NumberFor
 import FileUpload from "../components/FileUpload/FileUpload";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
+import * as yup from "yup";
 import axios from "axios";
 
 const Add = () => {
   const navigate = useNavigate();
+  const browserLocale = navigator.language;
+  const date = new Date();
+
+  console.log(date.toLocaleDateString());
+
+  const { alert, showAlert, closeAlert } = useAlert();
+  const [barang, setDataBarang] = useState([]);
+  const [customer, setDataCustomer] = useState([]);
+  const [searched, setSearched] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [data_no_rep, setDataNoRep] = useState([]);
+  const [lastService, setLastService] = useState([]);
+  const [expand, setExpand] = useState(true);
+
+  const schemaNoRep = useMemo(() => {
+    return yup.object().shape({
+      no_rep: yup.string().required(),
+      no_call: yup.string().required(),
+      no_lap: yup.string().required(),
+      pelapor: yup.string().required(),
+      waktu_call: yup.date().required(),
+      waktu_dtg: yup.date().required(),
+      status_call: yup.string().required(),
+      keluhan: yup.string().required(),
+      kat_keluhan: yup.string().required(),
+      problem: yup.string().required(),
+      kat_problem: yup.string().required(),
+      solusi: yup.string().required(),
+      waktu_mulai: yup.date().required(),
+      waktu_selesai: yup
+        .date()
+        .min(
+          yup.ref("waktu_mulai"),
+          "Waktu selesai tidak boleh sebelum waktu mulai"
+        ),
+      count_bw: yup
+        .string()
+        .required()
+        .test(
+          "not-less-than-previous-bw",
+          "Counter B/W tidak boleh lebih kecil dari data sebelumnya.",
+          function (value) {
+            const { count_bw } = lastService.count_bw;
+            const n_count = Number(count_bw);
+            const n_val = Number(value);
+
+            console.log(typeof n_count);
+            if (n_val === undefined || n_val === null) return false;
+            return n_val >= n_count;
+          }
+        ),
+      count_cl: yup
+        .string()
+        .required()
+        .test(
+          "not-less-than-previous-cl",
+          "Counter C/L tidak boleh lebih kecil dari data sebelumnya.",
+          function (value) {
+            const { count_cl } = lastService.count_cl;
+            if (value === undefined || value === null) return false;
+            return value >= count_cl;
+          }
+        ),
+      saran: yup.string().required(),
+      status_res: yup.string().required(),
+      rep_ke: yup.number().nullable(),
+      pic: yup.mixed().when("$isEdit", {
+        is: false, // when not editing, i.e., adding
+        then: (schema) =>
+          schema
+            .required("File bukti harus diunggah.")
+            .test(
+              "fileType",
+              "Hanya file gambar (jpg, png, jpeg, pdf) yang diperbolehkan.",
+              (value) => {
+                return (
+                  value &&
+                  [
+                    "image/jpeg",
+                    "image/png",
+                    "image/jpg",
+                    "application/pdf",
+                  ].includes(value.type)
+                );
+              }
+            )
+            .test(
+              "fileSize",
+              `Ukuran file maksimal ${import.meta.env.VITE_MAX_FILE_MB}MB.`,
+              (value) => {
+                const max_byte = import.meta.env.VITE_MAX_FILE_MB * 1024 * 1024;
+                return value && value.size <= max_byte;
+              }
+            ),
+        otherwise: (schema) => schema.nullable().notRequired(),
+      }),
+    });
+  }, [lastService]);
 
   const {
     register,
@@ -75,23 +180,16 @@ const Add = () => {
       count_cl: "",
       saran: "",
       status_res: "",
+      no_fd: "",
       rep_ke: 0,
       pic: null,
     },
   });
 
-  const { alert, showAlert, closeAlert } = useAlert();
-  const [barang, setDataBarang] = useState([]);
-  const [customer, setDataCustomer] = useState([]);
-  const [searched, setSearched] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [data_no_rep, setDataNoRep] = useState([]);
-  const [expand, setExpand] = useState(true);
-
   let statusRes = watch("status_res");
 
   useEffect(() => {
-    async function fetchNoRep() {
+    const fetchNoRep = async () => {
       try {
         const response = await axios.get(
           `${import.meta.env.VITE_API_URL}api/get-no-rep`
@@ -100,7 +198,7 @@ const Add = () => {
       } catch (error) {
         console.error("Error fetching No Report:", error);
       }
-    }
+    };
 
     fetchNoRep();
   }, []);
@@ -171,6 +269,32 @@ const Add = () => {
     }
   };
 
+  const fetchLastService = async (no_seri) => {
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}api/get-last-service`,
+        {
+          params: {
+            no_seri: no_seri,
+          },
+        }
+      );
+
+      const data = response.data;
+      console.log(data);
+
+      if (data.length <= 0) {
+        setLastService(null);
+        return;
+      }
+
+      setLastService(data[0]);
+    } catch (error) {
+      console.error("Error fetching last service:", error);
+      showAlert("Gagal mengambil service sebelumnya", "error");
+    }
+  };
+
   const handleSearch = async () => {
     setLoading(true);
 
@@ -197,6 +321,11 @@ const Add = () => {
       // Fetch customer data
       const customer = await fetchDataBarang(noRep);
       if (customer) {
+        const dataLastService = await fetchLastService(
+          displayValue(customer["d:Serial_No"])
+        );
+        console.log(dataLastService);
+
         await fetchContRes(
           customer["d:Sell_to_Customer_No"],
           customer["d:Serial_No"]
@@ -228,7 +357,11 @@ const Add = () => {
   };
 
   const onSubmit = async (values) => {
-    setLoading(true);
+    // setLoading(true);
+    // console.log(getValues("count_bw"));
+    // return;
+    console.log(getValues("count_bw"));
+    console.log(lastService.count_bw);
     try {
       const data = new FormData();
 
@@ -252,11 +385,11 @@ const Add = () => {
         }
       });
 
-      // data.forEach((value, key) => {
-      //   console.log(key + " = " + value);
-      // });
+      data.forEach((value, key) => {
+        console.log(key + " = " + value);
+      });
 
-      // return;
+      return;
 
       // Submit main form
       const response = await axios.post(
@@ -300,7 +433,10 @@ const Add = () => {
   };
 
   const onInvalid = (errors) => {
-    console.log("Form has errors:", errors);
+    showAlert(
+      "Terjadi kesalahan pada input data mohon check kembali.",
+      "error"
+    );
   };
 
   // Theme and media query for responsiveness
@@ -393,7 +529,6 @@ const Add = () => {
                       </Grid>
                       {/* Row 2 */}
                       <Grid size={{ xs: 12, md: 6 }}>
-                        <Typography>No. Seri :</Typography>
                         <Grid>
                           <Typography>Kode Area :</Typography>
                           <Typography>Group :</Typography>
@@ -425,28 +560,85 @@ const Add = () => {
                   <AccordionDetails>
                     <Grid container spacing={5}>
                       <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-                        <Typography>Kode Mesin :</Typography>
                         <Typography>
-                          Seri : {displayValue(customer?.["d:Serial_No"])}
+                          No Seri : {displayValue(customer?.["d:Serial_No"])}
                         </Typography>
                         <Typography>
                           Nama Mesin :{" "}
                           {displayValue(customer?.["d:Machine_Name"])}
                         </Typography>
-                      </Grid>
-
-                      <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                         <Typography>
                           Type : {displayValue(customer?.["d:Machine_Code"])}
                         </Typography>
-                        <Typography>Tanggal Instalasi :</Typography>
-                        <Typography>Tanggal Kontrak :</Typography>
                       </Grid>
 
                       <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-                        <Typography>Type Service :</Typography>
+                        <Typography>Tanggal Instalasi :</Typography>
+                        <Typography>Tanggal Kontrak :</Typography>
+                        <Typography>Tipe Service :</Typography>
+                      </Grid>
+
+                      <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                         <Typography>Masa :</Typography>
-                        <Typography>Tanggal Akhir Service :</Typography>
+                        <Typography>
+                          Tanggal Akhir Service :{" "}
+                          {displayFormatDate(lastService?.waktu_selesai)}
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </AccordionDetails>
+                </Accordion>
+              </Grid>
+
+              {/* Accordion 2.5  */}
+              <Grid size={12}>
+                <Accordion
+                  expanded={!expand}
+                  disabled={!searched || !getValues("no_rep")}
+                >
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreRounded />}
+                    aria-controls="panel1-content"
+                    id="panel1-header"
+                  >
+                    <Typography component="span" variant="h5">
+                      Detail Laporan
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Grid container spacing={5}>
+                      <Grid size={{ xs: 12, md: 6 }}>
+                        <Typography
+                          sx={{ color: "rgba(0, 0, 0, 0.6)" }}
+                          id="no_lap"
+                        >
+                          No. Laporan
+                        </Typography>
+                        <TextField
+                          variant="outlined"
+                          type="number"
+                          fullWidth
+                          {...register("no_lap")}
+                          error={!!errors.no_lap}
+                          helperText={errors.no_lap?.message}
+                        />
+                      </Grid>
+
+                      <Grid size={{ xs: 12, md: 6 }}>
+                        <Typography
+                          sx={{ color: "rgba(0, 0, 0, 0.6)" }}
+                          id="no_fd"
+                        >
+                          No. FreshDesk
+                        </Typography>
+                        <TextField
+                          variant="outlined"
+                          type="number"
+                          fullWidth
+                          {...register("no_fd")}
+                          error={!!errors.no_fd}
+                          helperText={errors.no_fd?.message}
+                        />
                       </Grid>
                     </Grid>
                   </AccordionDetails>
@@ -519,7 +711,46 @@ const Add = () => {
                           render={({ field }) => (
                             <DateTimePicker
                               ampm={false}
+                              minDateTime={new Date(minDateTime)}
+                              maxDateTime={new Date(maxDateTime)}
+                              format="dd-MM-yy HH:mm"
                               {...field}
+                              // onChange={(newValue) => {
+                              //   const now = dayjs();
+                              //   const diffInDays = now.diff(
+                              //     dayjs(newValue),
+                              //     "day"
+                              //   );
+
+                              //   if (
+                              //     diffInDays <
+                              //     import.meta.env.VITE_FORWARD_PENJADWALAN_DAYS
+                              //   ) {
+                              //     showAlert(
+                              //       `Waktu tidak boleh lebih dari ${
+                              //         import.meta.env
+                              //           .VITE_FORWARD_PENJADWALAN_DAYS
+                              //       } hari ke depan.`,
+                              //       "error"
+                              //     );
+                              //     return;
+                              //   }
+
+                              //   if (
+                              //     diffInDays >
+                              //     import.meta.env.VITE_BACKDATE_DAYS
+                              //   ) {
+                              //     showAlert(
+                              //       `Waktu tidak boleh lebih dari ${
+                              //         import.meta.env.VITE_BACKDATE_DAYS
+                              //       } hari ke belakang.`,
+                              //       "error"
+                              //     );
+                              //     return;
+                              //   }
+
+                              //   field.onChange(newValue); // still update the form
+                              // }}
                               slotProps={{
                                 textField: {
                                   fullWidth: true,
@@ -542,41 +773,11 @@ const Add = () => {
                             <DateTimePicker
                               ampm={false}
                               {...field}
+                              minDateTime={new Date(minDateTime)}
+                              maxDateTime={new Date(maxDateTime)}
+                              format="dd-MM-yy HH:mm"
                               onChange={(newValue) => {
-                                const now = dayjs();
-                                const diffInDays = now.diff(
-                                  dayjs(newValue),
-                                  "day"
-                                );
                                 const callTime = watch("waktu_call");
-
-                                if (
-                                  diffInDays <
-                                  import.meta.env.VITE_FORWARD_PENJADWALAN_DAYS
-                                ) {
-                                  showAlert(
-                                    `Waktu tidak boleh lebih dari ${
-                                      import.meta.env
-                                        .VITE_FORWARD_PENJADWALAN_DAYS
-                                    } hari ke depan.`,
-                                    "error"
-                                  );
-                                  return;
-                                }
-
-                                if (
-                                  diffInDays >
-                                  import.meta.env.VITE_BACKDATE_DAYS
-                                ) {
-                                  showAlert(
-                                    `Waktu tidak boleh lebih dari ${
-                                      import.meta.env.VITE_BACKDATE_DAYS
-                                    } hari ke belakang.`,
-                                    "error"
-                                  );
-                                  return;
-                                }
-
                                 if (
                                   callTime &&
                                   dayjs(newValue).isBefore(dayjs(callTime))
@@ -686,28 +887,11 @@ const Add = () => {
                     id="panel1-header"
                   >
                     <Typography component="span" variant="h5">
-                      Detail Report
+                      Detail Hasil Service
                     </Typography>
                   </AccordionSummary>
                   <AccordionDetails>
                     <Grid container spacing={5}>
-                      <Grid size={{ xs: 12, md: 6 }}>
-                        <Typography
-                          sx={{ color: "rgba(0, 0, 0, 0.6)" }}
-                          id="no_lap"
-                        >
-                          No. Laporan
-                        </Typography>
-                        <TextField
-                          variant="outlined"
-                          type="number"
-                          fullWidth
-                          {...register("no_lap")}
-                          error={!!errors.no_lap}
-                          helperText={errors.no_lap?.message}
-                        />
-                      </Grid>
-
                       <Grid size={{ xs: 12, md: 6 }}>
                         <Typography
                           sx={{ color: "rgba(0, 0, 0, 0.6)" }}
@@ -779,7 +963,35 @@ const Add = () => {
                           render={({ field }) => (
                             <DateTimePicker
                               ampm={false}
+                              minDateTime={new Date(minDateTime)}
+                              maxDateTime={new Date(maxDateTime)}
+                              format="dd-MM-yy HH:mm"
                               {...field}
+                              // onChange={(newValue) => {
+                              //   const now = dayjs();
+                              //   const diffInDays = now.diff(
+                              //     dayjs(newValue),
+                              //     "day"
+                              //   );
+
+                              //   if (diffInDays < -maxForwardDays) {
+                              //     showAlert(
+                              //       `Waktu tidak boleh lebih dari ${maxForwardDays} hari ke depan.`,
+                              //       "error"
+                              //     );
+                              //     return;
+                              //   }
+
+                              //   if (diffInDays > maxBackdateDays) {
+                              //     showAlert(
+                              //       `Waktu tidak boleh lebih dari ${maxBackdateDays} hari ke belakang.`,
+                              //       "error"
+                              //     );
+                              //     return;
+                              //   }
+
+                              //   field.onChange(newValue);
+                              // }}
                               slotProps={{
                                 textField: {
                                   fullWidth: true,
@@ -803,38 +1015,11 @@ const Add = () => {
                             <DateTimePicker
                               ampm={false}
                               {...field}
+                              minDateTime={new Date(minDateTime)}
+                              maxDateTime={new Date(maxDateTime)}
+                              format="dd-MM-yy HH:mm"
                               onChange={(newValue) => {
-                                const now = dayjs();
-                                const diffInDays = now.diff(
-                                  dayjs(newValue),
-                                  "day"
-                                );
                                 const mulaiTime = watch("waktu_mulai");
-
-                                if (
-                                  diffInDays < import.meta.env.VITE_FORWARD_DAYS
-                                ) {
-                                  showAlert(
-                                    `Waktu tidak boleh lebih dari ${
-                                      import.meta.env.VITE_FORWARD_DAYS
-                                    } hari ke depan.`,
-                                    "error"
-                                  );
-                                  return;
-                                }
-
-                                if (
-                                  diffInDays >
-                                  import.meta.env.VITE_BACKDATE_DAYS
-                                ) {
-                                  showAlert(
-                                    `Waktu tidak boleh lebih dari ${
-                                      import.meta.env.VITE_BACKDATE_DAYS
-                                    } hari ke belakang.`,
-                                    "error"
-                                  );
-                                  return;
-                                }
 
                                 if (
                                   mulaiTime &&

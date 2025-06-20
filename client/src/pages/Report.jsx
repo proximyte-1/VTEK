@@ -36,6 +36,8 @@ const Report = () => {
     type: "",
     no_cus: "",
     no_seri: "",
+    nama_teknisi: "",
+    kode_area: "",
   });
 
   const [exp_columns, setExpColumns] = useState([
@@ -220,7 +222,7 @@ const Report = () => {
     setLoading(true);
     try {
       const response = await fetch(
-        import.meta.env.VITE_API_URL + `api/export-excel`,
+        import.meta.env.VITE_API_URL + `api/export-report`,
         {
           method: "POST",
           headers: {
@@ -359,7 +361,28 @@ const Report = () => {
                 value={dataFilter.no_seri}
                 name="no_seri"
                 onChange={handleChange}
-                disabled={dataFilter.no_cus == "" ? true : false}
+              />
+            </Grid>
+
+            <Grid size={{ xs: 12, md: 6 }}>
+              <InputLabel id="nama_teknisi">Nama Teknisi</InputLabel>
+              <TextField
+                variant="outlined"
+                fullWidth
+                value={dataFilter.nama_teknisi}
+                name="nama_teknisi"
+                onChange={handleChange}
+              />
+            </Grid>
+
+            <Grid size={{ xs: 12, md: 6 }}>
+              <InputLabel id="kode_area">Area</InputLabel>
+              <TextField
+                variant="outlined"
+                fullWidth
+                value={dataFilter.kode_area}
+                name="kode_area"
+                onChange={handleChange}
               />
             </Grid>
 

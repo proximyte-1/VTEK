@@ -1,16 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Link } from "react-router-dom";
-import { format } from "date-fns";
 import {
   Container,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
   Button,
   Typography,
   Snackbar,
@@ -19,6 +10,8 @@ import {
 } from "@mui/material";
 import dayjs from "dayjs";
 import { DataGrid } from "@mui/x-data-grid";
+import axios from "axios";
+import { useAlert } from "../utils/alert";
 
 const FLKNoRep = () => {
   const location = useLocation();
@@ -68,17 +61,26 @@ const FLKNoRep = () => {
             variant="contained"
             color="warning"
             onClick={() => navigate(`edit/id=${params.row.id}`)}
+            sx={{ marginX: 1 }}
           >
             Edit
+          </Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={() => handleExport(params.row.id)}
+            disabled={loading}
+          >
+            {loading ? <CircularProgress size={24} /> : "Export"}
           </Button>
         </>
       ),
     },
   ];
 
-  const [open, setOpen] = useState(false);
-  const [alertData, setAlertData] = useState({ message: "", severity: "info" });
+  const { alert, showAlert, closeAlert } = useAlert();
   const [datas, setDatas] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     async function fetchDataFLK() {
@@ -95,19 +97,48 @@ const FLKNoRep = () => {
     }
 
     if (location.state?.message) {
-      setAlertData({
-        message: location.state.message,
-        severity: location.state.severity || "info",
-      });
-      setOpen(true);
+      showAlert(location.state.message, location.state.severity || "info");
     }
 
     fetchDataFLK();
   }, [location.state]);
 
-  function displayValue(value) {
-    return value === null || value === undefined || value == "" ? "-" : value;
-  }
+  const handleExport = async (lk_id) => {
+    setLoading(true);
+    try {
+      const data = datas.find(({ id }) => id == lk_id);
+
+      const response = await fetch(
+        import.meta.env.VITE_API_URL + `api/export-lk-norep`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            data: data,
+            reportTitle: `Report Laporan Kerja`,
+          }),
+        }
+      );
+      if (!response.ok) throw new Error("Export failed");
+
+      // Convert response to Blob and download
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Report ${dayjs().format("DD-MM-YYYY")}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setLoading(false);
+    } catch (err) {
+      console.error("Export error:", err);
+      showAlert("Failed to export Excel", "error");
+      setLoading(false);
+    }
+  };
 
   return (
     <Container>
@@ -144,18 +175,21 @@ const FLKNoRep = () => {
         New Data
       </Button>
 
+      {/* Alert notifications */}
       <Snackbar
-        open={open}
+        open={alert.open}
         autoHideDuration={5000}
+        onClose={closeAlert}
         anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-        onClose={() => setOpen(false)}
       >
         <Alert
-          severity={alertData.severity}
-          onClose={() => setOpen(false)}
+          onClose={closeAlert}
           variant="filled"
+          severity={alert.severity}
+          fontSize="inherit"
+          sx={{ width: "100%" }}
         >
-          {alertData.message}
+          {alert.message}
         </Alert>
       </Snackbar>
     </Container>

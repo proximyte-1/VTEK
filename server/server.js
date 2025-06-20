@@ -12,6 +12,11 @@ import xml2js from "xml2js";
 import httpntlm from "httpntlm";
 import ExcelJS from "exceljs";
 import bcrypt from "bcrypt";
+import cookieSession from "cookie-session";
+import passport from "passport";
+import session from "express-session";
+import passportGoogle from "passport-google-oauth20";
+const GoogleStrategy = passportGoogle.Strategy;
 
 const app = express();
 const __filename = fileURLToPath(import.meta.url);
@@ -74,6 +79,11 @@ const formatDateForSQL = (input) => {
   return d.isValid() ? d.format("YYYY-MM-DD HH:mm:ss") : null;
 };
 
+const formatNumber = (val) =>
+  typeof val === "number"
+    ? val.toLocaleString("id-ID")
+    : parseFloat(val)?.toLocaleString("id-ID") || "-";
+
 const toNullableInt = (value) => {
   return value === undefined ||
     value === null ||
@@ -134,10 +144,93 @@ const fetchNavData = (url = null, callback) => {
   );
 };
 
+const requireLogin = (req, res, next) => {
+  if (req.isAuthenticated && req.isAuthenticated()) {
+    return next();
+  }
+  res.status(401).json({ message: "Unauthorized: Login required" });
+};
+
 // Middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: "http://localhost:5173",
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET, // use same .env value
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      maxAge: 24 * 60 * 60 * 1000, // 1 day
+      sameSite: "lax", // or 'none' if using HTTPS and cross-origin
+    },
+  })
+);
+
+app.use(passport.initialize());
+app.use(passport.session());
+
+passport.serializeUser((user, done) => {
+  done(null, user);
+});
+
+passport.deserializeUser((user, done) => {
+  done(null, user);
+});
+
+passport.use(
+  new GoogleStrategy(
+    {
+      clientID: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      callbackURL: "/auth/google/callback",
+    },
+    (accessToken, refreshToken, profile, done) => {
+      // Save user info here (e.g. to DB), for now just return profile
+      return done(null, profile);
+    }
+  )
+);
+
+app.get(
+  "/auth/google",
+  passport.authenticate("google", {
+    scope: ["profile", "email"],
+  })
+);
+
+app.get(
+  "/auth/google/callback",
+  passport.authenticate("google", {
+    failureRedirect: "/login",
+    session: true,
+  }),
+  (req, res) => {
+    // Redirect to frontend after successful login
+    res.redirect("http://localhost:5173/dashboard");
+  }
+);
+
+app.get("/auth/logout", (req, res, next) => {
+  req.logout((err) => {
+    if (err) return next(err);
+    res.redirect("http://localhost:5173/login");
+  });
+});
+
+app.get("/api/user", (req, res) => {
+  if (req.isAuthenticated()) {
+    res.json(req.user);
+  } else {
+    res.status(401).json({ message: "Not authenticated" });
+  }
+});
 
 // === GET Routes ===
 app.get("/api/get-flk", async (req, res) => {
@@ -229,10 +322,11 @@ app.get("/api/get-no-rep", async (req, res) => {
 
 app.get("/api/get-last-service", async (req, res) => {
   const { no_seri } = req.query;
+  console.log(no_seri);
 
   try {
     const result = await pool.query(
-      `SELECT no_seri, waktu_selesai, count_bw, count_cl FROM dbo.${process.env.TABLE_LK} WHERE no_seri = '${no_seri}' ORDER BY waktu_selesai DESC`
+      `SELECT TOP 1 waktu_selesai, count_bw, count_cl FROM dbo.${process.env.TABLE_LK} WHERE no_seri = '${no_seri}' ORDER BY waktu_selesai DESC`
     );
     res.json(result.recordset);
   } catch (err) {
@@ -468,7 +562,7 @@ app.post("/api/export-data", async (req, res) => {
 
     if (dari && sampai) {
       conditions.push(
-        "FORMAT(created_at, 'yyyy-MM-dd') BETWEEN @dari AND @sampai"
+        "FORMAT(waktu_selesai, 'yyyy-MM-dd') BETWEEN @dari AND @sampai"
       );
       request.input("dari", dayjs(dari).format("YYYY-MM-DD"));
       request.input("sampai", dayjs(sampai).format("YYYY-MM-DD"));
@@ -486,7 +580,7 @@ app.post("/api/export-data", async (req, res) => {
 
     const whereClause =
       conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-    const query = `SELECT * FROM dbo.${process.env.TABLE_LK} ${whereClause}`;
+    const query = `SELECT * FROM dbo.${process.env.TABLE_LK} ${whereClause} ORDER BY waktu_selesai ASC`;
 
     // execute
     const result = await request.query(query);
@@ -504,7 +598,7 @@ app.post("/api/export-data", async (req, res) => {
   return;
 });
 
-app.post("/api/export-excel", async (req, res) => {
+app.post("/api/export-report", async (req, res) => {
   try {
     const { data: data, reportTitle, columns } = req.body;
 
@@ -730,6 +824,176 @@ app.post("/api/export-excel", async (req, res) => {
   }
 });
 
+app.post("/api/export-lk-norep", async (req, res) => {
+  try {
+    const {
+      data,
+      reportTitle = "Single Export",
+      signature = {
+        columns: [
+          { label: "Teknisi", name: "" },
+          { label: "Supervisor", name: "" },
+          { label: "Manager", name: "" },
+        ],
+      },
+    } = req.body;
+
+    const columns = [
+      { field: "no_rep", headerName: "No. Report" },
+      { field: "no_seri", headerName: "No. Seri" },
+      { field: "no_lap", headerName: "No. Laporan" },
+      { field: "no_cus", headerName: "No. Customer" },
+      { field: "waktu_mulai", headerName: "Mulai" },
+      { field: "waktu_selesai", headerName: "Selesai" },
+      { field: "kat_problem", headerName: "Problem" },
+      { field: "problem", headerName: "Keterangan Problem" },
+      { field: "solusi", headerName: "Solusi" },
+      { field: "count_bw", headerName: "Counter B/W" },
+      { field: "count_cl", headerName: "Counter C/L" },
+      { field: "status_call", headerName: "Status Call" },
+      { field: "status_res", headerName: "Result" },
+    ];
+
+    if (!data || typeof data !== "object" || !data.id) {
+      return res.status(400).send("Invalid or missing data");
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Single Report");
+
+    const borderAll = {
+      top: { style: "thin" },
+      left: { style: "thin" },
+      bottom: { style: "thin" },
+      right: { style: "thin" },
+    };
+
+    // === Set fixed column widths for all A-C
+    ["A", "B", "C"].forEach((col) => (worksheet.getColumn(col).width = 30));
+
+    // === Title row
+    worksheet.mergeCells("A1:C1");
+    const titleCell = worksheet.getCell("A1");
+    titleCell.value = reportTitle;
+    titleCell.font = { bold: true, size: 20 };
+    titleCell.alignment = { horizontal: "center", vertical: "middle" };
+
+    worksheet.addRow([]); // spacer
+
+    // === Data Table Header
+    const headerRow = worksheet.addRow(["Column", "Data"]);
+    headerRow.font = { bold: true };
+    headerRow.eachCell((cell) => {
+      cell.border = borderAll;
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+    });
+
+    // === Data rows based on columns config
+    columns.forEach(({ field, headerName }) => {
+      let raw = data[field];
+
+      // Format by type
+      if (["waktu_mulai", "waktu_selesai"].includes(field) && raw) {
+        raw = dayjs(raw).format("DD MMMM YYYY - HH:mm");
+      }
+
+      if (["count_bw", "count_cl"].includes(field)) {
+        raw = formatNumber(raw);
+      }
+
+      const row = worksheet.addRow([
+        headerName,
+        raw != null && raw !== "" ? raw : "-",
+      ]);
+
+      row.eachCell((cell) => {
+        cell.border = borderAll;
+        cell.alignment = { vertical: "middle", wrapText: true };
+      });
+    });
+
+    // === Separator Row
+    worksheet.addRow([]);
+
+    // === Fetch barang from DB
+    const barangResult = await pool.request().query(`
+      SELECT no_brg, nama_brg, qty
+      FROM dbo.${process.env.TABLE_BRG}
+      WHERE no_lk = '${data.id}'
+    `);
+
+    const barangList = barangResult.recordset || [];
+
+    // === Barang Header
+    const barangHeader = worksheet.addRow(["No Barang", "Nama Barang", "Qty"]);
+    barangHeader.font = { bold: true };
+    barangHeader.eachCell((cell) => {
+      cell.border = borderAll;
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+    });
+
+    // === Barang Rows
+    barangList.forEach((barang) => {
+      const row = worksheet.addRow([
+        barang.no_brg || "-",
+        barang.nama_brg || "-",
+        barang.qty || "-",
+      ]);
+      row.eachCell((cell) => {
+        cell.border = borderAll;
+        cell.alignment = {
+          horizontal: "left",
+          vertical: "middle",
+          wrapText: true,
+        };
+      });
+    });
+
+    worksheet.addRow([]); // spacer before signature
+
+    // === Signature Section
+    const labels = signature.columns.map((col) => col.label || "-");
+    const names = signature.columns.map((col) =>
+      col.name ? `( ${col.name} )` : ""
+    );
+
+    const labelRow = worksheet.addRow(labels);
+    labelRow.eachCell((cell) => {
+      cell.border = borderAll;
+      cell.font = { bold: true };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+    });
+
+    const signRow = worksheet.addRow(["", "", ""]);
+    signRow.height = 100;
+    signRow.eachCell((cell) => {
+      cell.border = borderAll;
+    });
+
+    const nameRow = worksheet.addRow(names);
+    nameRow.eachCell((cell) => {
+      cell.border = borderAll;
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+    });
+
+    // === Send file
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=${reportTitle.replace(/\s+/g, "_")}.xlsx`
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error("Excel export error:", err);
+    res.status(500).send("Failed to generate Excel file");
+  }
+});
+
 // ==== USER CRUD ====
 app.post("/api/create-users", upload.single("pic"), async (req, res) => {
   const { name, username, pass } = req.body;
@@ -833,8 +1097,6 @@ app.get("/api/get-last-contract", async (req, res) => {
     const result = await pool.query(
       `SELECT TOP 2 id, tgl_contract FROM dbo.${process.env.TABLE_CONTRACT} WHERE no_seri = '${no_seri}' ORDER BY tgl_contract DESC`
     );
-
-    console.log(result);
     res.json(result.recordset);
   } catch (err) {
     res.status(500).json({ error: "Database error" });
@@ -848,8 +1110,6 @@ app.get("/api/get-contract-by-id", async (req, res) => {
     const result = await pool.query(
       `SELECT * FROM dbo.${process.env.TABLE_CONTRACT} WHERE id = '${id}'`
     );
-
-    console.log(result);
     res.json(result.recordset);
   } catch (err) {
     res.status(500).json({ error: "Database error" });
@@ -868,15 +1128,14 @@ app.get("/api/get-contract", async (req, res) => {
 });
 
 app.post("/api/create-contract", upload.none(), async (req, res) => {
-  const { no_seri, tgl_inst, tgl_contract, type_service, masa } = req.body;
+  const { no_seri, tgl_contract, type_service, masa } = req.body;
 
   try {
-    const inst = formatDateForSQL(tgl_inst);
     const contract = formatDateForSQL(tgl_contract);
 
     const query = `
-      INSERT INTO dbo.${process.env.TABLE_CONTRACT} (no_seri, tgl_inst, tgl_last_inst, tgl_contract, type_service, masa)
-      VALUES ('${no_seri}', '${inst}', '${inst}', '${contract}', '${type_service}', '${masa}')
+      INSERT INTO dbo.${process.env.TABLE_CONTRACT} (no_seri, tgl_contract, type_service, masa)
+      VALUES ('${no_seri}', '${contract}', '${type_service}', '${masa}')
     `;
 
     const result = await pool.query(query);
@@ -891,18 +1150,98 @@ app.post("/api/create-contract", upload.none(), async (req, res) => {
 
 app.post("/api/edit-contract", upload.none(), async (req, res) => {
   const { id } = req.query;
-  const { no_seri, tgl_inst, tgl_contract, type_service, masa } = req.body;
+  const { no_seri, tgl_contract, type_service, masa } = req.body;
 
   try {
-    const inst = formatDateForSQL(tgl_inst);
     const contract = formatDateForSQL(tgl_contract);
 
     const query = `
-      UPDATE dbo.${process.env.TABLE_CONTRACT} SET no_seri = '${no_seri}', tgl_inst = '${inst}', tgl_last_inst = '${inst}', tgl_contract = '${contract}', type_service = '${type_service}', masa = '${masa}' WHERE id = ${id}
+      UPDATE dbo.${process.env.TABLE_CONTRACT} SET no_seri = '${no_seri}', tgl_contract = '${contract}', type_service = '${type_service}', masa = '${masa}' WHERE id = '${id}'
     `;
 
     const result = await pool.query(query);
     res.json({ ok: true, message: "Contract updated" });
+  } catch (err) {
+    console.error(err);
+    res
+      .status(500)
+      .json({ ok: false, message: "Insert failed", error: err.message });
+  }
+});
+
+// ==== INSTALASI CRUD ====
+app.get("/api/get-instalasi-by-id", async (req, res) => {
+  const { id } = req.query;
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_INSTALASI} WHERE id = '${id}'`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/get-id-contract", async (req, res) => {
+  const { id } = req.query;
+
+  try {
+    const result = await pool.query(
+      `SELECT id FROM dbo.${process.env.TABLE_CONTRACT}`
+    );
+
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/get-instalasi", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_INSTALASI}`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.post("/api/create-instalasi", upload.none(), async (req, res) => {
+  const { id_kontrak, tgl_instalasi, lokasi } = req.body;
+
+  try {
+    const inst = formatDateForSQL(tgl_instalasi);
+
+    const query = `
+      INSERT INTO dbo.${process.env.TABLE_INSTALASI} (id_kontrak, tgl_instalasi, lokasi, created_by)
+      VALUES ('${id_kontrak}', '${inst}', '${lokasi}', '1')
+    `;
+
+    const result = await pool.query(query);
+    res.json({ ok: true, message: "Instalasi inserted" });
+  } catch (err) {
+    console.error(err);
+    res
+      .status(500)
+      .json({ ok: false, message: "Insert failed", error: err.message });
+  }
+});
+
+app.post("/api/edit-instalasi", upload.none(), async (req, res) => {
+  const { id } = req.query;
+  const { id_kontrak, tgl_instalasi, lokasi } = req.body;
+
+  try {
+    const inst = formatDateForSQL(tgl_instalasi);
+
+    const query = `
+      UPDATE dbo.${process.env.TABLE_INSTALASI} SET id_kontrak = '${id_kontrak}', tgl_instalasi = '${inst}', lokasi = '${lokasi}' WHERE id = '${id}'
+    `;
+
+    const result = await pool.query(query);
+    res.json({ ok: true, message: "Instalasi updated" });
   } catch (err) {
     console.error(err);
     res
