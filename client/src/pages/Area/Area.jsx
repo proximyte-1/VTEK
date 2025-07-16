@@ -14,7 +14,7 @@ import { useAlert } from "../../utils/alert";
 import { Margin } from "@mui/icons-material";
 import dayjs from "dayjs";
 
-const Contract = () => {
+const Area = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -27,16 +27,9 @@ const Contract = () => {
         return params.api.getAllRowIds().indexOf(params.id) + 1;
       },
     },
-    { field: "no_contract", headerName: "No. Kontrak", flex: 1 },
-    { field: "no_cus", headerName: "No. Customer", flex: 1 },
-    { field: "type_service", headerName: "Tipe Service", flex: 1 },
-    {
-      field: "tgl_contract",
-      headerName: "Tanggal Kontrak",
-      flex: 1,
-      renderCell: (params) =>
-        params.value ? dayjs(params.value).format("DD-MM-YYYY") : "-",
-    },
+    { field: "kode_area", headerName: "Kode Area", flex: 1 },
+    { field: "groups", headerName: "Group", flex: 1 },
+    { field: "nama_area", headerName: "Nama Area", flex: 1 },
     {
       field: "actions",
       headerName: "Actions",
@@ -54,15 +47,6 @@ const Contract = () => {
           >
             Edit
           </Button>
-
-          <Button
-            variant="contained"
-            color="info"
-            sx={{ marginRight: 0.5 }}
-            onClick={() => navigate(`view/${params.row.id}`)}
-          >
-            View
-          </Button>
         </>
       ),
     },
@@ -73,15 +57,15 @@ const Contract = () => {
   const [datas, setDatas] = useState([]);
 
   useEffect(() => {
-    async function fetchContract() {
+    async function fetchArea() {
       try {
         const response = await axios.get(
-          import.meta.env.VITE_API_URL + `api/get-contract`
+          import.meta.env.VITE_API_URL + `api/get-area`
         );
 
         setDatas(response.data);
       } catch (error) {
-        console.error("Error fetching contract:", error);
+        console.error("Error fetching area:", error);
       }
     }
 
@@ -89,13 +73,13 @@ const Contract = () => {
       showAlert(location.state.message, location.state.severity || "info");
     }
 
-    fetchContract();
+    fetchArea();
   }, [location.state]);
 
   return (
     <Container>
       <Typography variant="h4" gutterBottom>
-        Master Kontrak
+        Master Area
       </Typography>
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Box sx={{ minWidth: 700 }}>
@@ -146,4 +130,4 @@ const Contract = () => {
   );
 };
 
-export default Contract;
+export default Area;

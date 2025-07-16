@@ -50,10 +50,6 @@ import axios from "axios";
 
 const Add = () => {
   const navigate = useNavigate();
-  const browserLocale = navigator.language;
-  const date = new Date();
-
-  console.log(date.toLocaleDateString());
 
   const { alert, showAlert, closeAlert } = useAlert();
   const [barang, setDataBarang] = useState([]);
@@ -62,7 +58,10 @@ const Add = () => {
   const [loading, setLoading] = useState(false);
   const [data_no_rep, setDataNoRep] = useState([]);
   const [lastService, setLastService] = useState([]);
+  const [contract, setContract] = useState([]);
+  const [instalasi, setInstalasi] = useState([]);
   const [expand, setExpand] = useState(true);
+  const [retry, setRetry] = useState(false);
 
   const schemaNoRep = useMemo(() => {
     return yup.object().shape({
@@ -90,13 +89,12 @@ const Add = () => {
         .required()
         .test(
           "not-less-than-previous-bw",
-          "Counter B/W tidak boleh lebih kecil dari data sebelumnya.",
+          `Tidak boleh kurang dari data sebelumnya (${lastService?.count_bw}).`,
           function (value) {
-            const { count_bw } = lastService.count_bw;
-            const n_count = Number(count_bw);
+            const { count_bw } = lastService;
+            const n_count = Number(count_bw) || 0;
             const n_val = Number(value);
 
-            console.log(typeof n_count);
             if (n_val === undefined || n_val === null) return false;
             return n_val >= n_count;
           }
@@ -106,11 +104,14 @@ const Add = () => {
         .required()
         .test(
           "not-less-than-previous-cl",
-          "Counter C/L tidak boleh lebih kecil dari data sebelumnya.",
+          `Tidak boleh kurang dari data sebelumnya (${lastService?.count_cl}).`,
           function (value) {
-            const { count_cl } = lastService.count_cl;
-            if (value === undefined || value === null) return false;
-            return value >= count_cl;
+            const { count_cl } = lastService;
+            const n_count = Number(count_cl) || 0;
+            const n_val = Number(value);
+
+            if (n_val === undefined || n_val === null) return false;
+            return n_val >= n_count;
           }
         ),
       saran: yup.string().required(),
@@ -281,7 +282,6 @@ const Add = () => {
       );
 
       const data = response.data;
-      console.log(data);
 
       if (data.length <= 0) {
         setLastService(null);
@@ -292,6 +292,56 @@ const Add = () => {
     } catch (error) {
       console.error("Error fetching last service:", error);
       showAlert("Gagal mengambil service sebelumnya", "error");
+    }
+  };
+
+  const fetchDataContract = async (no_cus) => {
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}api/get-contract-lk`,
+        {
+          params: {
+            no_cus: no_cus,
+          },
+        }
+      );
+
+      const data = response.data;
+
+      if (data.length <= 0) {
+        setContract(null);
+        return;
+      }
+
+      setContract(data[0]);
+    } catch (error) {
+      console.error("Error fetching contract:", error);
+      showAlert("Gagal mengambil data kontrak", "error");
+    }
+  };
+
+  const fetchDataInstalasi = async (no_seri) => {
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}api/get-instalasi-lk`,
+        {
+          params: {
+            no_seri: no_seri,
+          },
+        }
+      );
+
+      const data = response.data;
+
+      if (data.length <= 0) {
+        setInstalasi(null);
+        return;
+      }
+
+      setInstalasi(data[0]);
+    } catch (error) {
+      console.error("Error fetching instalation:", error);
+      showAlert("Gagal mengambil data instalasi", "error");
     }
   };
 
@@ -324,7 +374,14 @@ const Add = () => {
         const dataLastService = await fetchLastService(
           displayValue(customer["d:Serial_No"])
         );
-        console.log(dataLastService);
+
+        const dataContract = await fetchDataContract(
+          displayValue(customer["d:Sell_to_Customer_No"])
+        );
+
+        const dataInstalasi = await fetchDataInstalasi(
+          displayValue(customer["d:Serial_No"])
+        );
 
         await fetchContRes(
           customer["d:Sell_to_Customer_No"],
@@ -357,11 +414,8 @@ const Add = () => {
   };
 
   const onSubmit = async (values) => {
-    // setLoading(true);
-    // console.log(getValues("count_bw"));
-    // return;
-    console.log(getValues("count_bw"));
-    console.log(lastService.count_bw);
+    setLoading(true);
+
     try {
       const data = new FormData();
 
@@ -385,16 +439,11 @@ const Add = () => {
         }
       });
 
-      data.forEach((value, key) => {
-        console.log(key + " = " + value);
-      });
-
-      return;
-
       // Submit main form
       const response = await axios.post(
         `${import.meta.env.VITE_API_URL}api/create-flk`,
-        data
+        data,
+        { timeout: 5000 }
       );
       const { data: result } = response;
 
@@ -416,7 +465,7 @@ const Add = () => {
       );
 
       if (barangResponse.status === 200) {
-        setLoading(false);
+        setRetry(false);
         navigate("/flk", {
           state: {
             message: "Data Laporan Kerja Berhasil Ditambahkan!",
@@ -428,7 +477,14 @@ const Add = () => {
       }
     } catch (error) {
       console.error("Error submitting data:", error);
-      showAlert("Terjadi kesalahan saat mengirim data.", "error");
+      if (error.status === 408 || error.code === "ECONNABORTED") {
+        showAlert("Request timed out. Tolong coba kembali.", "error");
+        setRetry(true);
+      } else {
+        showAlert("Terjadi kesalahan dalam proses input.", "error");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -444,7 +500,7 @@ const Add = () => {
   const isSmallScreen = useMediaQuery(theme.breakpoints.down("sm"));
 
   return (
-    <Paper sx={{ padding: 3 }} elevation={4}>
+    <Paper sx={{ padding: 3, marginBottom: 5 }} elevation={4}>
       <Typography variant="h5" marginBottom={"1.5em"} gutterBottom>
         New Laporan Kerja
       </Typography>
@@ -452,6 +508,7 @@ const Add = () => {
         <form
           onSubmit={handleSubmit(onSubmit, onInvalid)}
           encType="multipart/form-data"
+          noValidate
         >
           <Grid container spacing={5} marginY={"2em"} alignItems="center">
             {/* Input Report */}
@@ -559,6 +616,7 @@ const Add = () => {
                   </AccordionSummary>
                   <AccordionDetails>
                     <Grid container spacing={5}>
+                      {/* Row 1 */}
                       <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                         <Typography>
                           No Seri : {displayValue(customer?.["d:Serial_No"])}
@@ -572,14 +630,23 @@ const Add = () => {
                         </Typography>
                       </Grid>
 
+                      {/* Row 2 */}
                       <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-                        <Typography>Tanggal Instalasi :</Typography>
-                        <Typography>Tanggal Kontrak :</Typography>
-                        <Typography>Tipe Service :</Typography>
+                        <Typography>
+                          Tanggal Instalasi :{" "}
+                          {displayFormatDate(instalasi?.tgl_instalasi)}
+                        </Typography>
+                        <Typography>
+                          Tanggal Kontrak :{" "}
+                          {displayFormatDate(contract?.tgl_contract_exp)}
+                        </Typography>
+                        <Typography>
+                          Tipe Service : {displayValue(contract?.type_service)}
+                        </Typography>
                       </Grid>
 
+                      {/* Row 3 */}
                       <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-                        <Typography>Masa :</Typography>
                         <Typography>
                           Tanggal Akhir Service :{" "}
                           {displayFormatDate(lastService?.waktu_selesai)}
@@ -648,8 +715,8 @@ const Add = () => {
               {/* Accordion 3 */}
               <Grid size={12}>
                 <Accordion
-                  expanded={!expand}
                   disabled={!searched || !getValues("no_rep")}
+                  expanded={!expand}
                 >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
@@ -1258,6 +1325,8 @@ const Add = () => {
               >
                 {loading ? (
                   <CircularProgress size={20} color="inherit" />
+                ) : retry ? (
+                  "Retry"
                 ) : (
                   "Submit"
                 )}

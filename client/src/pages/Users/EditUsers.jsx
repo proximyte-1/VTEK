@@ -11,6 +11,10 @@ import {
   Snackbar,
   CircularProgress,
   Box,
+  Select,
+  MenuItem,
+  FormControl,
+  FormHelperText,
 } from "@mui/material";
 import { schemaUsers, handleFileSelect } from "../../utils/helpers";
 import { useAlert } from "../../utils/alert";
@@ -19,6 +23,7 @@ import FileUpload from "../../components/FileUpload/FileUpload";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import axios from "axios";
+import { selectRole, selectType } from "../../utils/constants";
 
 const EditUsers = () => {
   const { id } = useParams();
@@ -38,16 +43,19 @@ const EditUsers = () => {
     context: { isEdit: true },
     defaultValues: {
       name: "",
-      username: "",
+      email: "",
+      role: "",
+      type: "",
     },
   });
 
-  const handleFileSelect = (file) => {
-    setValue("pic", file, { shouldValidate: true });
-  };
+  // const handleFileSelect = (file) => {
+  //   setValue("pic", file, { shouldValidate: true });
+  // };
 
   const { alert, showAlert, closeAlert } = useAlert();
   const [loading, setLoading] = useState(false);
+  const [dataArea, setDataArea] = useState("");
 
   useEffect(() => {
     async function fetchDataUser() {
@@ -65,7 +73,22 @@ const EditUsers = () => {
       }
     }
 
+    const fetchKodeArea = async () => {
+      try {
+        axios.get(`${import.meta.env.VITE_API_URL}api/get-area`).then((res) => {
+          if (res.data.length > 0) {
+            const data = res.data;
+            setDataArea(data);
+          }
+        });
+      } catch (err) {
+        console.error("Terjadi kesalahan saat memanggil data: ", err);
+        showAlert("Terjadi kesalahan saat memanggil data", "error");
+      }
+    };
+
     fetchDataUser();
+    fetchKodeArea();
   }, []);
 
   const onSubmit = async (values) => {
@@ -102,7 +125,10 @@ const EditUsers = () => {
   };
 
   const onInvalid = (errors) => {
-    console.log("Form has errors:", errors);
+    showAlert(
+      "Terjadi kesalahan pada input data mohon check kembali.",
+      "error"
+    );
   };
 
   // Theme and media query for responsiveness
@@ -131,30 +157,92 @@ const EditUsers = () => {
               helperText={errors.name?.message}
             />
           </Grid>
-
           <Grid size={{ xs: 12, md: 6 }}>
-            <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="username">
-              Username
+            <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="email">
+              Email
             </Typography>
             <TextField
               variant="outlined"
+              type="email"
               fullWidth
-              {...register("username")}
-              error={!!errors.username}
-              helperText={errors.username?.message}
+              {...register("email")}
+              error={!!errors.email}
+              helperText={errors.email?.message}
             />
           </Grid>
-
-          <Grid size={{ xs: 12, md: 12 }}>
-            {/* Upload */}
-            <Box sx={{ width: "100%", overflowX: "auto" }}>
-              <Box>
-                <FileUpload
-                  onFileSelect={handleFileSelect}
-                  onError={(msg) => (msg ? showAlert(msg, "error") : null)}
-                />
-              </Box>
-            </Box>
+          {dataArea && (
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Controller
+                name="kode_area"
+                control={control}
+                render={({ field }) => (
+                  <FormControl fullWidth error={!!errors.kode_area}>
+                    <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
+                      Pilih Kode Area
+                    </Typography>
+                    <Select
+                      id="supervisor-select"
+                      variant="outlined"
+                      {...field}
+                      displayEmpty
+                    >
+                      {dataArea.map((item) => (
+                        <MenuItem key={item.id} value={item.id}>
+                          {item.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                    {errors.kode_area && (
+                      <FormHelperText>
+                        {errors.kode_area?.message}
+                      </FormHelperText>
+                    )}
+                  </FormControl>
+                )}
+              />
+            </Grid>
+          )}
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="role">
+              Role
+            </Typography>
+            <Controller
+              name="role"
+              control={control}
+              render={({ field }) => (
+                <Select {...field} variant="outlined" fullWidth>
+                  <MenuItem disabled value="">
+                    <em>Pilih Role</em>
+                  </MenuItem>
+                  {Object.entries(selectRole).map(([value, label]) => (
+                    <MenuItem key={value} value={value}>
+                      {label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              )}
+            />
+          </Grid>
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="type">
+              Type
+            </Typography>
+            <Controller
+              name="type"
+              control={control}
+              render={({ field }) => (
+                <Select {...field} variant="outlined" fullWidth>
+                  <MenuItem disabled value="">
+                    <em>Pilih Type</em>
+                  </MenuItem>
+                  {Object.entries(selectType).map(([value, label]) => (
+                    <MenuItem key={value} value={value}>
+                      {label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              )}
+            />
           </Grid>
         </Grid>
 

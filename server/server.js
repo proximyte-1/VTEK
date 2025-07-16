@@ -16,6 +16,11 @@ import cookieSession from "cookie-session";
 import passport from "passport";
 import session from "express-session";
 import passportGoogle from "passport-google-oauth20";
+import timeout from "connect-timeout";
+import timeoutHandler from "./timeoutHandler.js";
+import { hasChanges } from "./server_helper.js";
+import { error } from "console";
+
 const GoogleStrategy = passportGoogle.Strategy;
 
 const app = express();
@@ -28,6 +33,8 @@ dotenv.config({ path: path.resolve(__dirname, "../.env") });
 const PORT = process.env.PORT || 3000;
 const SALT = 10;
 
+app.use(timeout("10s")); // Request timeout
+
 // Database config
 const dbConfig = {
   server: process.env.DB_SERVER,
@@ -38,6 +45,12 @@ const dbConfig = {
     encrypt: false,
     trustServerCertificate: true,
   },
+  pool: {
+    max: 10, // Maximum number of connections
+    min: 0, // Minimum number of connections
+    idleTimeoutMillis: 30000, // Close idle connections after 30s
+  },
+  requestTimeout: 3000,
 };
 
 let pool;
@@ -78,6 +91,10 @@ const formatDateForSQL = (input) => {
   const d = dayjs(input);
   return d.isValid() ? d.format("YYYY-MM-DD HH:mm:ss") : null;
 };
+const formatDatesForSQL = (input) => {
+  const d = dayjs(input, "DD-MM-YYYY");
+  return d.isValid() ? d.format("YYYY-MM-DD") : null;
+};
 
 const formatNumber = (val) =>
   typeof val === "number"
@@ -95,6 +112,10 @@ const toNullableInt = (value) => {
 
 const navFilterEncode = (field, value) => {
   const data = encodeURIComponent(`${field} eq '${value}'`);
+  return `?$filter=${data}`;
+};
+const navSubStringEncode = (field, value) => {
+  const data = encodeURIComponent(`substringof('${value}',${field})`);
   return `?$filter=${data}`;
 };
 
@@ -213,14 +234,28 @@ app.get(
   }),
   (req, res) => {
     // Redirect to frontend after successful login
-    res.redirect("http://localhost:5173/dashboard");
+    res.redirect("http://localhost:5173/");
   }
 );
 
 app.get("/auth/logout", (req, res, next) => {
   req.logout((err) => {
-    if (err) return next(err);
-    res.redirect("http://localhost:5173/login");
+    if (err) {
+      console.error("Error during logout:", err);
+      return next(err); // Pass error to Express error handler
+    }
+    // Destroy the session on the server
+    req.session.destroy((destroyErr) => {
+      if (destroyErr) {
+        console.error("Error destroying session:", destroyErr);
+        return next(destroyErr);
+      }
+      // Clear the session cookie from the client's browser
+      res.clearCookie("connect.sid"); // Assuming 'connect.sid' is your session cookie name
+      // IMPORTANT: Send a success response instead of a redirect.
+      // The frontend will handle the redirection.
+      res.status(200).json({ ok: true, message: "Logged out successfully" });
+    });
   });
 });
 
@@ -322,7 +357,6 @@ app.get("/api/get-no-rep", async (req, res) => {
 
 app.get("/api/get-last-service", async (req, res) => {
   const { no_seri } = req.query;
-  console.log(no_seri);
 
   try {
     const result = await pool.query(
@@ -334,7 +368,63 @@ app.get("/api/get-last-service", async (req, res) => {
   }
 });
 
+app.get("/api/get-contract-lk", async (req, res) => {
+  const { no_cus } = req.query;
+  try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_CONTRACT} WHERE no_cus = '${no_cus}' ORDER BY tgl_contract_exp DESC`
+    );
+
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/get-instalasi-lk", async (req, res) => {
+  const { no_seri } = req.query;
+  console.log(
+    `SELECT * FROM dbo.${process.env.TABLE_INSTALASI} WHERE no_seri = '${no_seri}' ORDER BY tgl_instalasi DESC`
+  );
+  try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_INSTALASI} WHERE no_seri = '${no_seri}' ORDER BY tgl_instalasi DESC`
+    );
+
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
 // === HIT NAVISION ===
+app.get("/api/nav-by-no-cus", (req, res) => {
+  const no_cus = req.query.no_cus;
+  const navURL =
+    process.env.NAV_WS_URL + navFilterEncode("Sell_to_Customer_No", no_cus);
+
+  fetchNavData(navURL, (err, data) => {
+    if (err)
+      return res.status(err.status).json({ error: err, ok: false, data: null });
+    res.status(200).json({ ok: true, data: data });
+  });
+});
+
+app.get("/api/nav-by-nama-cus", (req, res) => {
+  const { nama_cus } = req.query;
+  const navURL =
+    process.env.NAV_WS_URL +
+    navSubStringEncode("Sell_to_Customer_Name", nama_cus);
+
+  console.log(navURL);
+
+  fetchNavData(navURL, (err, data) => {
+    if (err)
+      return res.status(err.status).json({ error: err, ok: false, data: null });
+    res.status(200).json({ ok: true, data: data });
+  });
+});
+
 app.get("/api/nav-data", (req, res) => {
   const id = "SPGFI" + req.query.id;
   const navURL = process.env.NAV_WS_URL + navFilterEncode("FGINO", id);
@@ -363,36 +453,40 @@ app.get("/api/nav", (req, res) => {
 
 // ==== FLK CRUD ====
 app.post("/api/create-flk", upload.single("pic"), async (req, res) => {
-  try {
-    const fields = req.body;
-    const file = req.file;
-    if (!file)
-      return res.status(400).json({ ok: false, message: "File is required" });
+  const fields = req.body;
+  const file = req.file;
+  if (!file)
+    return res.status(400).json({ ok: false, message: "File is required" });
 
-    const filePath = path.join(uploadPath, file.filename);
-    const {
-      no_rep,
-      no_seri,
-      type,
-      no_cus,
-      no_call,
-      pelapor,
-      waktu_call,
-      waktu_dtg,
-      status_call,
-      keluhan,
-      kat_keluhan,
-      problem,
-      kat_problem,
-      solusi,
-      waktu_mulai,
-      waktu_selesai,
-      saran,
-      status_res,
-      created_by,
-      deleted_at,
-      no_lap,
-    } = fields;
+  const filePath = path.join(uploadPath, file.filename);
+  const {
+    no_rep,
+    no_seri,
+    type,
+    no_cus,
+    no_call,
+    pelapor,
+    waktu_call,
+    waktu_dtg,
+    status_call,
+    keluhan,
+    kat_keluhan,
+    problem,
+    kat_problem,
+    solusi,
+    waktu_mulai,
+    waktu_selesai,
+    saran,
+    status_res,
+    created_by,
+    deleted_at,
+    no_lap,
+  } = fields;
+
+  const transaction = new sql.Transaction(pool);
+  try {
+    await transaction.begin();
+    const request = new sql.Request(transaction);
 
     // Sanitize Null
     const rep_ke = toNullableInt(fields.rep_ke);
@@ -404,7 +498,7 @@ app.post("/api/create-flk", upload.single("pic"), async (req, res) => {
     const mulai = formatDateForSQL(waktu_mulai);
     const selesai = formatDateForSQL(waktu_selesai);
 
-    const result = await pool.query`
+    const query = `
       INSERT INTO [dbo].[WebVTK] (
         no_rep, no_cus, no_call, pelapor, waktu_call, waktu_dtg, status_call,
         keluhan, kat_keluhan, problem, kat_problem, solusi, waktu_mulai,
@@ -419,17 +513,36 @@ app.post("/api/create-flk", upload.single("pic"), async (req, res) => {
       )
     `;
 
-    const id = result.recordset[0].id;
+    const execute = await request.query(query);
 
+    const id = result.recordset[0].id;
+    await transaction.commit();
     res.json({ ok: true, message: "Data inserted.", data: { id } });
-  } catch (error) {
-    console.error("Insert Error:", error);
-    res.status(500).json({
-      ok: false,
-      message: "Database insert error",
-      error: error.message, // Short message
-      details: error, // Full error object
-    });
+  } catch (err) {
+    console.error(err);
+    try {
+      await transaction.rollback();
+      console.log("Transaction rolled back.");
+    } catch (rollbackErr) {
+      console.error("Error rolling back transaction:", rollbackErr);
+    }
+
+    if (err.name === "RequestError" && err.message.includes("Timeout")) {
+      console.log("Detected a database request timeout.");
+      // Use 408 Request Timeout for client-side handling
+      res.status(408).json({
+        ok: false,
+        message: "Database operation timed out. Please try again.",
+      });
+    } else {
+      // Handle all other types of database or logic errors
+      console.log("Detected a general server error.");
+      res.status(500).json({
+        ok: false,
+        message: "Failed to create laporan kerja due to a server error.",
+        error: err.message,
+      });
+    }
   }
 });
 
@@ -439,8 +552,11 @@ app.post("/api/create-brg", async (req, res) => {
   if (!no_lk || !Array.isArray(items)) {
     return res.status(400).json({ ok: false, message: "Invalid Input" });
   }
-
+  const transaction = new sql.Transaction(pool);
   try {
+    await transaction.begin();
+    const request = new sql.Request(transaction);
+
     for (const item of items) {
       const { no_brg, nama, qty } = item;
 
@@ -449,47 +565,74 @@ app.post("/api/create-brg", async (req, res) => {
         VALUES ('${no_lk}', '${no_brg}', '${nama}', ${qty})
       `;
 
-      const result = await pool.query(query);
+      const execute = await request.query(query);
     }
 
     res.json({ ok: true, message: "Barang inserted" });
   } catch (err) {
     console.error(err);
-    res
-      .status(500)
-      .json({ ok: false, message: "Insert failed", error: err.message });
+    try {
+      await transaction.rollback();
+      console.log("Transaction rolled back.");
+    } catch (rollbackErr) {
+      console.error("Error rolling back transaction:", rollbackErr);
+    }
+
+    if (err.name === "RequestError" && err.message.includes("Timeout")) {
+      console.log("Detected a database request timeout.");
+      // Use 408 Request Timeout for client-side handling
+      res.status(408).json({
+        ok: false,
+        message: "Database operation timed out. Please try again.",
+      });
+    } else {
+      // Handle all other types of database or logic errors
+      console.log("Detected a general server error.");
+      res.status(500).json({
+        ok: false,
+        message: "Failed to create barang due to a server error.",
+        error: err.message,
+      });
+    }
   }
 });
 
 app.post("/api/edit-flk", upload.single("pic"), async (req, res) => {
-  try {
-    const { id } = req.query;
-    const fields = req.body;
-    const file = req.file;
+  const { id } = req.query;
+  const fields = req.body;
+  const file = req.file;
+  if (!file)
+    return res.status(400).json({ ok: false, message: "File is required" });
 
-    const {
-      no_seri,
-      no_cus,
-      no_call,
-      pelapor,
-      waktu_call,
-      waktu_dtg,
-      status_call,
-      keluhan,
-      kat_keluhan,
-      problem,
-      kat_problem,
-      solusi,
-      waktu_mulai,
-      waktu_selesai,
-      saran,
-      status_res,
-      no_lap,
-    } = fields;
+  const filePath = path.join(uploadPath, file.filename);
+  const {
+    no_rep,
+    no_seri,
+    no_cus,
+    no_call,
+    pelapor,
+    waktu_call,
+    waktu_dtg,
+    status_call,
+    keluhan,
+    kat_keluhan,
+    problem,
+    kat_problem,
+    solusi,
+    waktu_mulai,
+    waktu_selesai,
+    saran,
+    status_res,
+    no_lap,
+  } = fields;
+
+  const transaction = new sql.Transaction(pool);
+  try {
+    await transaction.begin();
+    const request = new sql.Request(transaction);
 
     // Sanitize Null
     const rep_ke = toNullableInt(fields.rep_ke);
-    const no_rep = toNullableInt(fields.no_rep);
     const count_bw = toNullableInt(fields.count_bw);
     const count_cl = toNullableInt(fields.count_cl);
 
@@ -520,27 +663,40 @@ app.post("/api/edit-flk", upload.single("pic"), async (req, res) => {
     }
 
     if (file) {
-      const filePath = path.join(uploadPath, file.filename);
       query += `, pic = '${filePath}'`;
     }
 
     query += ` WHERE id = ${id}`;
 
-    await pool.query(query);
+    const execute = await request.query(query);
 
-    res.json({
-      ok: true,
-      status: 1,
-      message: "Data updated successfully",
-    });
+    await transaction.commit();
+    res.json({ ok: true, message: "Data updated." });
   } catch (err) {
     console.error(err);
-    res.status(500).json({
-      ok: false,
-      status: 0,
-      message: "Update failed",
-      error: err.message,
-    });
+    try {
+      await transaction.rollback();
+      console.log("Transaction rolled back.");
+    } catch (rollbackErr) {
+      console.error("Error rolling back transaction:", rollbackErr);
+    }
+
+    if (err.name === "RequestError" && err.message.includes("Timeout")) {
+      console.log("Detected a database request timeout.");
+      // Use 408 Request Timeout for client-side handling
+      res.status(408).json({
+        ok: false,
+        message: "Database operation timed out. Please try again.",
+      });
+    } else {
+      // Handle all other types of database or logic errors
+      console.log("Detected a general server error.");
+      res.status(500).json({
+        ok: false,
+        message: "Failed to create laporan kerja due to a server error.",
+        error: err.message,
+      });
+    }
   }
 });
 
@@ -994,20 +1150,152 @@ app.post("/api/export-lk-norep", async (req, res) => {
   }
 });
 
+app.post("/api/export-lk-noseri", async (req, res) => {
+  try {
+    const {
+      data,
+      reportTitle = "Single Export",
+      signature = {
+        columns: [
+          { label: "Teknisi", name: "" },
+          { label: "Supervisor", name: "" },
+          { label: "Manager", name: "" },
+        ],
+      },
+    } = req.body;
+
+    const columns = [
+      { field: "no_seri", headerName: "No. Seri" },
+      { field: "no_lap", headerName: "No. Laporan" },
+      { field: "no_cus", headerName: "No. Customer" },
+      { field: "waktu_mulai", headerName: "Mulai" },
+      { field: "waktu_selesai", headerName: "Selesai" },
+      { field: "kat_problem", headerName: "Problem" },
+      { field: "problem", headerName: "Keterangan Problem" },
+      { field: "solusi", headerName: "Solusi" },
+      { field: "count_bw", headerName: "Counter B/W" },
+      { field: "count_cl", headerName: "Counter C/L" },
+      { field: "status_call", headerName: "Status Call" },
+      { field: "status_res", headerName: "Result" },
+    ];
+
+    if (!data || typeof data !== "object" || !data.id) {
+      return res.status(400).send("Invalid or missing data");
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Single Report");
+
+    const borderAll = {
+      top: { style: "thin" },
+      left: { style: "thin" },
+      bottom: { style: "thin" },
+      right: { style: "thin" },
+    };
+
+    // === Set fixed column widths for all A-C
+    ["A", "B", "C"].forEach((col) => (worksheet.getColumn(col).width = 30));
+
+    // === Title row
+    worksheet.mergeCells("A1:C1");
+    const titleCell = worksheet.getCell("A1");
+    titleCell.value = reportTitle;
+    titleCell.font = { bold: true, size: 20 };
+    titleCell.alignment = { horizontal: "center", vertical: "middle" };
+
+    worksheet.addRow([]); // spacer
+
+    // === Data Table Header
+    const headerRow = worksheet.addRow(["Column", "Data"]);
+    headerRow.font = { bold: true };
+    headerRow.eachCell((cell) => {
+      cell.border = borderAll;
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+    });
+
+    // === Data rows based on columns config
+    columns.forEach(({ field, headerName }) => {
+      let raw = data[field];
+
+      // Format by type
+      if (["waktu_mulai", "waktu_selesai"].includes(field) && raw) {
+        raw = dayjs(raw).format("DD MMMM YYYY - HH:mm");
+      }
+
+      if (["count_bw", "count_cl"].includes(field)) {
+        raw = formatNumber(raw);
+      }
+
+      const row = worksheet.addRow([
+        headerName,
+        raw != null && raw !== "" ? raw : "-",
+      ]);
+
+      row.eachCell((cell) => {
+        cell.border = borderAll;
+        cell.alignment = { vertical: "middle", wrapText: true };
+      });
+    });
+
+    worksheet.addRow([]); // spacer before signature
+
+    // === Signature Section
+    const labels = signature.columns.map((col) => col.label || "-");
+    const names = signature.columns.map((col) =>
+      col.name ? `( ${col.name} )` : ""
+    );
+
+    const labelRow = worksheet.addRow(labels);
+    labelRow.eachCell((cell) => {
+      cell.border = borderAll;
+      cell.font = { bold: true };
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+    });
+
+    const signRow = worksheet.addRow(["", "", ""]);
+    signRow.height = 100;
+    signRow.eachCell((cell) => {
+      cell.border = borderAll;
+    });
+
+    const nameRow = worksheet.addRow(names);
+    nameRow.eachCell((cell) => {
+      cell.border = borderAll;
+      cell.alignment = { horizontal: "center", vertical: "middle" };
+    });
+
+    // === Send file
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=${reportTitle.replace(/\s+/g, "_")}.xlsx`
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error("Excel export error:", err);
+    res.status(500).send("Failed to generate Excel file");
+  }
+});
+
 // ==== USER CRUD ====
-app.post("/api/create-users", upload.single("pic"), async (req, res) => {
-  const { name, username, pass } = req.body;
-  let filePath = null;
+app.post("/api/create-users", upload.none(), async (req, res) => {
+  const { name, email, type, role } = req.body;
+  // let filePath = null;
 
-  const file = req.file;
-  if (file) filePath = path.join(uploadPath, file.filename);
+  // const file = req.file;
+  // if (file) filePath = path.join(uploadPath, file.filename);
 
-  const hashedPassword = await bcrypt.hash(pass, SALT);
+  // const hashedPassword = await bcrypt.hash(pass, SALT);
 
   try {
     const query = `
-      INSERT INTO dbo.${process.env.TABLE_USER} (name, username, pass, pic)
-      VALUES ('${name}', '${username}', '${hashedPassword}', '${filePath}')
+      INSERT INTO dbo.${process.env.TABLE_USER} (name, email, type, role)
+      VALUES ('${name}', '${email}', '${type}', '${role}')
     `;
 
     const result = await pool.query(query);
@@ -1020,20 +1308,21 @@ app.post("/api/create-users", upload.single("pic"), async (req, res) => {
   }
 });
 
-app.post("/api/edit-users", upload.single("pic"), async (req, res) => {
+app.post("/api/edit-users", upload.none(), async (req, res) => {
   const { id } = req.query;
-  const { name, username } = req.body;
-  let filePath = null;
+  const { name, email, type, role } = req.body;
+  // let filePath = null;
 
-  const file = req.file;
-  if (file) filePath = path.join(uploadPath, file.filename);
+  // const file = req.file;
+  // if (file) filePath = path.join(uploadPath, file.filename);
 
   try {
     const query = `
       UPDATE [dbo].${process.env.TABLE_USER}
-      SET [name] = '${name}'
-      ,[username] = '${username}'
-      ,[pic] = '${filePath}'
+      SET [email] = '${email}'
+      ,[type] = '${type}'
+      ,[role] = '${role}'
+      ,[name] = '${name}'
       WHERE id = '${id}'
     `;
 
@@ -1091,11 +1380,11 @@ app.get("/api/reset-pass", async (req, res) => {
 
 // ==== CONTRACT CRUD ====
 app.get("/api/get-last-contract", async (req, res) => {
-  const { no_seri } = req.query;
+  const { no_cus } = req.query;
 
   try {
     const result = await pool.query(
-      `SELECT TOP 2 id, tgl_contract FROM dbo.${process.env.TABLE_CONTRACT} WHERE no_seri = '${no_seri}' ORDER BY tgl_contract DESC`
+      `SELECT TOP 2 id, tgl_contract_exp FROM dbo.${process.env.TABLE_CONTRACT} WHERE no_cus = '${no_cus}' ORDER BY tgl_contract_exp DESC`
     );
     res.json(result.recordset);
   } catch (err) {
@@ -1127,45 +1416,365 @@ app.get("/api/get-contract", async (req, res) => {
   }
 });
 
-app.post("/api/create-contract", upload.none(), async (req, res) => {
-  const { no_seri, tgl_contract, type_service, masa } = req.body;
+app.get("/api/get-contract-type", async (req, res) => {
+  const { type } = req.query;
 
   try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_CONTRACT_TYPE} WHERE type_name = '${type}'`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/get-contract-machine", async (req, res) => {
+  const { id_contract } = req.query;
+  try {
+    const result = await pool.query(
+      `SELECT
+    id,
+    id_contract,
+    no_seri,
+    tgl_instalasi,
+    lokasi,
+    created_by,
+    created_at
+FROM
+    (
+        SELECT
+            *,
+            ROW_NUMBER() OVER (PARTITION BY no_seri ORDER BY created_at DESC) as rn
+        FROM
+            dbo.${process.env.TABLE_CONTRACT_MACHINE}
+        WHERE
+            id_contract = '${id_contract}'
+    ) AS SubQuery
+WHERE
+    rn = 1;
+`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/get-contract-machine-origin", async (req, res) => {
+  const { id_contract } = req.query;
+  try {
+    const result = await pool.query(
+      `SELECT
+    id,
+    id_contract,
+    no_seri,
+    tgl_instalasi,
+    lokasi,
+    created_by,
+    created_at
+FROM
+    (
+        SELECT
+            *,
+            ROW_NUMBER() OVER (PARTITION BY no_seri ORDER BY created_at ASC) as rn
+        FROM
+            dbo.${process.env.TABLE_CONTRACT_MACHINE}
+        WHERE
+            id_contract = '${id_contract}'
+    ) AS SubQuery
+WHERE
+    rn = 1;
+`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.post("/api/create-contract", upload.none(), async (req, res) => {
+  const { id, no_seri, tgl_contract, type_service, tgl_contract_exp, no_cus } =
+    req.body;
+
+  const serialNumbers = JSON.parse(no_seri);
+  if (!Array.isArray(serialNumbers)) {
+    throw new Error("no_seri must be an array");
+  }
+  const transaction = new sql.Transaction(pool);
+
+  try {
+    await transaction.begin();
+    const request = new sql.Request(transaction);
     const contract = formatDateForSQL(tgl_contract);
+    const contract_exp = formatDateForSQL(tgl_contract_exp);
 
     const query = `
-      INSERT INTO dbo.${process.env.TABLE_CONTRACT} (no_seri, tgl_contract, type_service, masa)
-      VALUES ('${no_seri}', '${contract}', '${type_service}', '${masa}')
+    INSERT INTO dbo.${process.env.TABLE_CONTRACT} (no_contract, tgl_contract, tgl_contract_exp, type_service, no_cus, created_by) OUTPUT INSERTED.id 
+    VALUES ('${id}', '${contract}', '${contract_exp}', '${type_service}', '${no_cus}', '1')
     `;
 
-    const result = await pool.query(query);
+    const execute = await request.query(query);
+    const contractId = execute.recordset[0].id;
+
+    // 3. Insert serial numbers with rollback protection
+    let allSerialsInserted = true;
+    const failedSerials = [];
+
+    for (const [index, item] of serialNumbers.entries()) {
+      try {
+        const inst = formatDatesForSQL(item.tgl_instalasi);
+
+        const serialQuery = `
+          INSERT INTO dbo.${process.env.TABLE_CONTRACT_MACHINE} 
+            (id_contract, no_seri, lokasi, tgl_instalasi, created_by) 
+          VALUES (
+            '${contractId}', 
+            '${item.no_seri}', 
+            '${item.lokasi || ""}',
+            '${inst || ""}',
+            1
+          )
+        `;
+
+        await request.query(serialQuery);
+      } catch (serialError) {
+        allSerialsInserted = false;
+        failedSerials.push({
+          index,
+          no_seri: item.no_seri,
+          error: serialError.message,
+        });
+        console.error(`Failed to insert serial ${item.no_seri}:`, serialError);
+        break; // Exit loop on first failure
+      }
+    }
+
+    // throw new Error("error");
+
+    // 4. Verify complete success before commit
+    if (!allSerialsInserted) {
+      throw new Error(
+        `Serial number insertion failed for items: ${JSON.stringify(
+          failedSerials
+        )}`
+      );
+    }
+
+    await transaction.commit();
     res.json({ ok: true, message: "Contract inserted" });
   } catch (err) {
     console.error(err);
-    res
-      .status(500)
-      .json({ ok: false, message: "Insert failed", error: err.message });
+    try {
+      await transaction.rollback();
+      console.log("Transaction rolled back.");
+    } catch (rollbackErr) {
+      console.error("Error rolling back transaction:", rollbackErr);
+    }
+
+    if (err.name === "RequestError" && err.message.includes("Timeout")) {
+      console.log("Detected a database request timeout.");
+      // Use 408 Request Timeout for client-side handling
+      res.status(408).json({
+        ok: false,
+        message: "Database operation timed out. Please try again.",
+      });
+    } else {
+      // Handle all other types of database or logic errors
+      console.log("Detected a general server error.");
+      res.status(500).json({
+        ok: false,
+        message: "Failed to create contract due to a server error.",
+        error: err.message,
+      });
+    }
   }
 });
 
 app.post("/api/edit-contract", upload.none(), async (req, res) => {
   const { id } = req.query;
-  const { no_seri, tgl_contract, type_service, masa } = req.body;
+  const { no_seri, tgl_contract, type_service, tgl_contract_exp } = req.body;
 
+  let transaction;
   try {
-    const contract = formatDateForSQL(tgl_contract);
+    // Validate input
+    if (!id) throw new Error("Contract ID is required");
+    if (!no_seri) throw new Error("Serial numbers are required");
 
-    const query = `
-      UPDATE dbo.${process.env.TABLE_CONTRACT} SET no_seri = '${no_seri}', tgl_contract = '${contract}', type_service = '${type_service}', masa = '${masa}' WHERE id = '${id}'
+    let serialNumbers;
+    try {
+      serialNumbers = JSON.parse(no_seri);
+      if (!Array.isArray(serialNumbers)) {
+        throw new Error("no_seri must be an array");
+      }
+    } catch (parseError) {
+      throw new Error("Invalid serial numbers format");
+    }
+
+    // Begin transaction
+    transaction = new sql.Transaction(pool);
+    await transaction.begin();
+    const request = new sql.Request(transaction);
+
+    // Format dates safely
+    const contractDate = formatDateForSQL(tgl_contract);
+    const contractExpDate = formatDateForSQL(tgl_contract_exp);
+
+    // 1. Update contract - USING PARAMETERIZED QUERY
+    const updateContractQuery = `
+      UPDATE dbo.${process.env.TABLE_CONTRACT} 
+      SET tgl_contract = @contractDate, 
+          tgl_contract_exp = @contractExpDate, 
+          type_service = @typeService
+      WHERE id = @id
     `;
 
-    const result = await pool.query(query);
-    res.json({ ok: true, message: "Contract updated" });
+    await request
+      .input("contractDate", sql.Date, contractDate)
+      .input("contractExpDate", sql.Date, contractExpDate)
+      .input("typeService", sql.VarChar, type_service)
+      .input("id", sql.VarChar, id)
+      .query(updateContractQuery);
+
+    // 2. Process machines
+    // Get current machines
+    const currentResult = await request.query(
+      `SELECT id, no_seri, lokasi 
+       FROM dbo.${process.env.TABLE_CONTRACT_MACHINE} 
+       WHERE id_contract = '${id}'`
+    );
+    const currentMachines = currentResult.recordset;
+
+    // Process incoming machines
+    for (const machine of serialNumbers) {
+      const existing = currentMachines.find(
+        (m) => m.no_seri === machine.no_seri
+      );
+
+      if (existing) {
+        // Update if changed - USING PARAMETERIZED QUERY
+        if (
+          existing.lokasi !== machine.lokasi ||
+          existing.no_seri !== machine.no_seri
+        ) {
+          await request
+            .input("update_no_seri", sql.VarChar, machine.no_seri)
+            .input("update_lokasi", sql.Text, machine.lokasi)
+            .input("update_id", sql.BigInt, existing.id).query(`
+              UPDATE dbo.${process.env.TABLE_CONTRACT_MACHINE} 
+              SET no_seri = @update_no_seri, lokasi = @update_lokasi 
+              WHERE id = @update_id
+            `);
+        }
+      } else {
+        // Add new machine - USING PARAMETERIZED QUERY
+        await request
+          .input("inst_no_seri", sql.VarChar, machine.no_seri)
+          .input("inst_lokasi", sql.Text, machine.lokasi)
+          .input("inst_id_contract", sql.VarChar, id).query(`
+            INSERT INTO dbo.${process.env.TABLE_CONTRACT_MACHINE} 
+            (no_seri, lokasi, id_contract, created_by) 
+            VALUES (@inst_no_seri, @inst_lokasi, @inst_id_contract, 1)
+          `);
+      }
+    }
+
+    // Find machines to delete
+    const machinesToDelete = currentMachines.filter(
+      (dbMachine) =>
+        !serialNumbers.some(
+          (incoming) => incoming.no_seri === dbMachine.no_seri
+        )
+    );
+
+    for (const machine of machinesToDelete) {
+      await request.input("del_id", sql.BigInt, machine.id).query(`
+          DELETE FROM dbo.${process.env.TABLE_CONTRACT_MACHINE} 
+          WHERE id = @del_id
+        `);
+    }
+
+    // Commit if all successful
+    await transaction.commit();
+    res.json({ ok: true, message: "Contract edited successfully" });
+  } catch (err) {
+    console.error("Error in edit-contract:", err);
+
+    // Rollback transaction if it exists
+    if (transaction) {
+      try {
+        await transaction.rollback();
+        console.log("Transaction rolled back due to error");
+      } catch (rollbackErr) {
+        console.error("Error during rollback:", rollbackErr);
+      }
+    }
+
+    // Determine appropriate error response
+    let statusCode = 500;
+    let errorMessage = "Failed to edit contract due to a server error";
+
+    if (
+      err.message.includes("must be an array") ||
+      err.message.includes("Invalid serial numbers")
+    ) {
+      statusCode = 400;
+      errorMessage = err.message;
+    } else if (err.message.includes("Contract ID is required")) {
+      statusCode = 400;
+      errorMessage = err.message;
+    }
+
+    res.status(statusCode).json({
+      ok: false,
+      message: errorMessage,
+      error: process.env.NODE_ENV === "development" ? err.message : undefined,
+    });
+  }
+});
+
+app.post("/api/update-contract-counter", upload.none(), async (req, res) => {
+  const { type, last_count } = req.body;
+
+  const transaction = new sql.Transaction(pool);
+
+  try {
+    await transaction.begin();
+    const request = new sql.Request(transaction);
+
+    const query = `
+   UPDATE dbo.${process.env.TABLE_CONTRACT_TYPE} SET last_count = ${last_count}  WHERE type_name = '${type}'
+    `;
+
+    const execute = await request.query(query);
+
+    await transaction.commit();
+    res.json({ ok: true });
   } catch (err) {
     console.error(err);
-    res
-      .status(500)
-      .json({ ok: false, message: "Insert failed", error: err.message });
+    try {
+      await transaction.rollback();
+      console.log("Transaction rolled back.");
+    } catch (rollbackErr) {
+      console.error("Error rolling back transaction:", rollbackErr);
+    }
+
+    if (err.name === "RequestError" && err.message.includes("Timeout")) {
+      console.log("Detected a database request timeout.");
+      // Use 408 Request Timeout for client-side handling
+      res.status(408).json({
+        ok: false,
+        message: "Database operation timed out. Please try again.",
+      });
+    } else {
+      // Handle all other types of database or logic errors
+      console.log("Detected a general server error.");
+      res.status(500).json({
+        ok: false,
+        message: "Failed to create contract due to a server error.",
+        error: err.message,
+      });
+    }
   }
 });
 
@@ -1177,6 +1786,39 @@ app.get("/api/get-instalasi-by-id", async (req, res) => {
     const result = await pool.query(
       `SELECT * FROM dbo.${process.env.TABLE_INSTALASI} WHERE id = '${id}'`
     );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/get-instalasi-by-contract", async (req, res) => {
+  const { id } = req.query;
+
+  try {
+    const result = await pool.query(
+      `SELECT
+    id,
+    id_contract,
+    no_seri,
+    tgl_instalasi,
+    lokasi,
+    created_by,
+    created_at
+FROM
+    (
+        SELECT
+            *,
+            ROW_NUMBER() OVER (PARTITION BY no_seri ORDER BY created_at DESC) as rn
+        FROM
+            dbo.${process.env.TABLE_CONTRACT_MACHINE}
+        WHERE
+            id_contract = '${id}'
+    ) AS SubQuery
+WHERE
+    rn = 1`
+    );
+
     res.json(result.recordset);
   } catch (err) {
     res.status(500).json({ error: "Database error" });
@@ -1209,23 +1851,151 @@ app.get("/api/get-instalasi", async (req, res) => {
 });
 
 app.post("/api/create-instalasi", upload.none(), async (req, res) => {
-  const { id_kontrak, tgl_instalasi, lokasi } = req.body;
+  const { id_kontrak, no_seri, tgl_instalasi } = req.body;
 
+  const serialNumbers = JSON.parse(no_seri);
+  if (!Array.isArray(serialNumbers)) {
+    throw new Error("no_seri must be an array");
+  }
+  const transaction = new sql.Transaction(pool);
   try {
+    await transaction.begin();
+    const request = new sql.Request(transaction);
     const inst = formatDateForSQL(tgl_instalasi);
 
-    const query = `
-      INSERT INTO dbo.${process.env.TABLE_INSTALASI} (id_kontrak, tgl_instalasi, lokasi, created_by)
-      VALUES ('${id_kontrak}', '${inst}', '${lokasi}', '1')
+    let allSerialsInserted = true;
+    const failedSerials = [];
+
+    for (const [index, item] of serialNumbers.entries()) {
+      try {
+        const query = `
+      INSERT INTO dbo.${process.env.TABLE_INSTALASI} (id_kontrak, no_seri, tgl_instalasi, lokasi, created_by)
+      VALUES ('${id_kontrak}', '${item.no_seri}', '${inst}', '${item.lokasi}', '1')
     `;
 
-    const result = await pool.query(query);
+        await request.query(query);
+      } catch (instError) {
+        allSerialsInserted = false;
+        failedSerials.push({
+          index,
+          no_seri: item.no_seri,
+          error: instError.message,
+        });
+        console.error(`Failed to insert serial ${item.no_seri}:`, instError);
+        break; // Exit loop on first failure
+      }
+    }
+
+    if (!allSerialsInserted) {
+      throw new Error(
+        `Serial number insertion failed for items: ${JSON.stringify(
+          failedSerials
+        )}`
+      );
+    }
+
+    await transaction.commit();
     res.json({ ok: true, message: "Instalasi inserted" });
   } catch (err) {
     console.error(err);
-    res
-      .status(500)
-      .json({ ok: false, message: "Insert failed", error: err.message });
+    try {
+      await transaction.rollback();
+      console.log("Transaction rolled back.");
+    } catch (rollbackErr) {
+      console.error("Error rolling back transaction:", rollbackErr);
+    }
+
+    if (err.name === "RequestError" && err.message.includes("Timeout")) {
+      console.log("Detected a database request timeout.");
+      // Use 408 Request Timeout for client-side handling
+      res.status(408).json({
+        ok: false,
+        message: "Database operation timed out. Please try again.",
+      });
+    } else {
+      // Handle all other types of database or logic errors
+      console.log("Detected a general server error.");
+      res.status(500).json({
+        ok: false,
+        message: "Failed to create contract due to a server error.",
+        error: err.message,
+      });
+    }
+  }
+});
+
+app.post("/api/create-pindah-instalasi", upload.none(), async (req, res) => {
+  const { no_seri } = req.body;
+
+  const serialNumbers = JSON.parse(no_seri);
+  if (!Array.isArray(serialNumbers)) {
+    throw new Error("no_seri must be an array");
+  }
+  const transaction = new sql.Transaction(pool);
+  try {
+    await transaction.begin();
+    const request = new sql.Request(transaction);
+
+    let allSerialsInserted = true;
+    const failedSerials = [];
+
+    for (const [index, item] of serialNumbers.entries()) {
+      try {
+        const inst = formatDatesForSQL(item.tgl_instalasi);
+
+        const query = `
+      INSERT INTO dbo.${process.env.TABLE_CONTRACT_MACHINE} (id_contract, no_seri, tgl_instalasi, lokasi, created_by)
+      VALUES ('${item.id_contract}', '${item.no_seri}', '${inst}', '${item.lokasi}', '1')
+    `;
+
+        await request.query(query);
+      } catch (instError) {
+        allSerialsInserted = false;
+        failedSerials.push({
+          index,
+          no_seri: item.no_seri,
+          error: instError.message,
+        });
+        console.error(`Failed to insert serial ${item.no_seri}:`, instError);
+        break; // Exit loop on first failure
+      }
+    }
+
+    if (!allSerialsInserted) {
+      throw new Error(
+        `Serial number insertion failed for items: ${JSON.stringify(
+          failedSerials
+        )}`
+      );
+    }
+
+    await transaction.commit();
+    res.json({ ok: true, message: "Instalasi inserted" });
+  } catch (err) {
+    console.error(err);
+    try {
+      await transaction.rollback();
+      console.log("Transaction rolled back.");
+    } catch (rollbackErr) {
+      console.error("Error rolling back transaction:", rollbackErr);
+    }
+
+    if (err.name === "RequestError" && err.message.includes("Timeout")) {
+      console.log("Detected a database request timeout.");
+      // Use 408 Request Timeout for client-side handling
+      res.status(408).json({
+        ok: false,
+        message: "Database operation timed out. Please try again.",
+      });
+    } else {
+      // Handle all other types of database or logic errors
+      console.log("Detected a general server error.");
+      res.status(500).json({
+        ok: false,
+        message: "Failed to create contract due to a server error.",
+        error: err.message,
+      });
+    }
   }
 });
 
@@ -1233,23 +2003,186 @@ app.post("/api/edit-instalasi", upload.none(), async (req, res) => {
   const { id } = req.query;
   const { id_kontrak, tgl_instalasi, lokasi } = req.body;
 
+  const transaction = new sql.Transaction(pool);
   try {
+    await transaction.begin();
+    const request = new sql.Request(transaction);
     const inst = formatDateForSQL(tgl_instalasi);
 
     const query = `
       UPDATE dbo.${process.env.TABLE_INSTALASI} SET id_kontrak = '${id_kontrak}', tgl_instalasi = '${inst}', lokasi = '${lokasi}' WHERE id = '${id}'
     `;
 
-    const result = await pool.query(query);
+    await request.query(query);
+    await transaction.commit();
     res.json({ ok: true, message: "Instalasi updated" });
   } catch (err) {
     console.error(err);
-    res
-      .status(500)
-      .json({ ok: false, message: "Insert failed", error: err.message });
+    try {
+      await transaction.rollback();
+      console.log("Transaction rolled back.");
+    } catch (rollbackErr) {
+      console.error("Error rolling back transaction:", rollbackErr);
+    }
+
+    if (err.name === "RequestError" && err.message.includes("Timeout")) {
+      console.log("Detected a database request timeout.");
+      // Use 408 Request Timeout for client-side handling
+      res.status(408).json({
+        ok: false,
+        message: "Database operation timed out. Please try again.",
+      });
+    } else {
+      // Handle all other types of database or logic errors
+      console.log("Detected a general server error.");
+      res.status(500).json({
+        ok: false,
+        message: "Failed to create contract due to a server error.",
+        error: err.message,
+      });
+    }
   }
 });
 
+app.get("/api/get-noseri-contract", async (req, res) => {
+  const { id_contract } = req.query;
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_CONTRACT_MACHINE} WHERE id_contract = '${id_contract}'`
+    );
+
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+// ==== AREA DAN TEKNISI CRUD ====
+app.get("/api/get-area", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_AREA}`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.post("/api/create-area", upload.none(), async (req, res) => {
+  const { kode_area, nama_area, groups, id_supervisor } = req.body;
+  const now = dayjs();
+
+  const transaction = new sql.Transaction(pool);
+  try {
+    await transaction.begin();
+    const request = new sql.Request(transaction);
+
+    const query = `
+      INSERT INTO dbo.${
+        process.env.TABLE_AREA
+      } (kode_area, nama_area, groups, id_supervisor, updated_at)
+      VALUES ('${kode_area}', '${nama_area}', '${groups}', '${id_supervisor}', '${formatDateForSQL(
+      now
+    )}')
+    `;
+
+    await request.query(query);
+    await transaction.commit();
+    res.json({ ok: true, message: "Area inserted" });
+  } catch (err) {
+    console.error(err);
+    try {
+      await transaction.rollback();
+      console.log("Transaction rolled back.");
+    } catch (rollbackErr) {
+      console.error("Error rolling back transaction:", rollbackErr);
+    }
+
+    if (err.name === "RequestError" && err.message.includes("Timeout")) {
+      console.log("Detected a database request timeout.");
+      // Use 408 Request Timeout for client-side handling
+      res.status(408).json({
+        ok: false,
+        message: "Database operation timed out. Please try again.",
+      });
+    } else {
+      // Handle all other types of database or logic errors
+      console.log("Detected a general server error.");
+      res.status(500).json({
+        ok: false,
+        message: "Failed to create contract due to a server error.",
+        error: err.message,
+      });
+    }
+  }
+});
+
+app.get("/api/get-area-by-id", async (req, res) => {
+  const { id = "" } = req.query;
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_AREA} WHERE id = '${id}'`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.post("/api/edit-area", upload.none(), async (req, res) => {
+  const { id = "" } = req.query;
+  const { kode_area, nama_area, groups, id_supervisor } = req.body;
+
+  const now = dayjs();
+  const transaction = new sql.Transaction(pool);
+  try {
+    await transaction.begin();
+    const request = new sql.Request(transaction);
+
+    const query = `
+      UPDATE dbo.${
+        process.env.TABLE_AREA
+      } SET kode_area = '${kode_area}', nama_area = '${nama_area}', groups = '${groups}', id_supervisor = '${id_supervisor}', updated_at = '${formatDateForSQL(
+      now
+    )}' WHERE id = '${id}'
+    `;
+
+    await request.query(query);
+    await transaction.commit();
+    res.json({ ok: true, message: "Area updated" });
+  } catch (err) {
+    console.error(err);
+    try {
+      await transaction.rollback();
+      console.log("Transaction rolled back.");
+    } catch (rollbackErr) {
+      console.error("Error rolling back transaction:", rollbackErr);
+    }
+
+    if (err.name === "RequestError" && err.message.includes("Timeout")) {
+      console.log("Detected a database request timeout.");
+      // Use 408 Request Timeout for client-side handling
+      res.status(408).json({
+        ok: false,
+        message: "Database operation timed out. Please try again.",
+      });
+    } else {
+      // Handle all other types of database or logic errors
+      console.log("Detected a general server error.");
+      res.status(500).json({
+        ok: false,
+        message: "Failed to create contract due to a server error.",
+        error: err.message,
+      });
+    }
+  }
+});
+
+// ==============================
+// ==============================
 app.use((req, res) => {
   res.status(404).json({ message: "Not found" });
 });

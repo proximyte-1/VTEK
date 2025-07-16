@@ -39,6 +39,17 @@ export const selectService = {
   Chrg: "Charge",
 };
 
+export const selectRole = {
+  1: "Teknisi",
+  2: "CS",
+  3: "Supervisor",
+};
+
+export const selectType = {
+  0: "Admin",
+  1: "Bukan Admin",
+};
+
 // Set limits from env variables
 const maxBackdateDays = Number(import.meta.env.VITE_BACKDATE_DAYS || 0);
 const maxForwardDays = Number(Math.abs(import.meta.env.VITE_FORWARD_DAYS) || 0);

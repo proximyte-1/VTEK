@@ -13,6 +13,8 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  FormControl,
+  FormHelperText,
 } from "@mui/material";
 import { useAlert } from "../../utils/alert";
 import { useNavigate, useParams } from "react-router-dom";
@@ -24,30 +26,25 @@ import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { maxDateTime, minDateTime, selectService } from "../../utils/constants";
 import dayjs from "dayjs";
+import { FormatAlignCenter } from "@mui/icons-material";
 
-const EditInstalasi = () => {
+const EditArea = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
   const { alert, showAlert, closeAlert } = useAlert();
   const [loading, setLoading] = useState(false);
-  const [idCont, setIdCont] = useState();
+  const [dataUser, setDataUser] = useState([]);
   const [retry, setRetry] = useState(false);
 
   const schema = useMemo(() => {
     return yup.object().shape({
-      id_kontrak: yup
-        .string()
-        .required()
-        .test("id-exists", "No Kontrak Tidak Ditemukan", function (value) {
-          if (!value || !idCont) return false;
-          return idCont.some((item) => item.id === value);
-        }),
-      no_seri: yup.array().required(),
-      tgl_instalasi: yup.date().required(),
-      lokasi: yup.string().required(),
+      kode_area: yup.string().required(),
+      nama_area: yup.string().required(),
+      groups: yup.string().required(),
+      id_supervisor: yup.number().required(),
     });
-  }, [idCont]);
+  }, []);
 
   const {
     register,
@@ -62,18 +59,18 @@ const EditInstalasi = () => {
     resolver: yupResolver(schema),
     context: { isEdit: false },
     defaultValues: {
-      id_kontrak: "",
-      no_seri: [],
-      tgl_instalasi: null,
-      lokasi: "",
+      kode_area: "",
+      nama_area: "",
+      groups: "",
+      id_supervisor: "",
     },
   });
 
   useEffect(() => {
-    const fetchInstalasiById = async () => {
+    const fetchAreaById = async () => {
       try {
         const response = await axios.get(
-          `${import.meta.env.VITE_API_URL}api/get-instalasi-by-id?id=${id}`
+          `${import.meta.env.VITE_API_URL}api/get-area-by-id?id=${id}`
         );
 
         const data = response.data[0];
@@ -93,17 +90,14 @@ const EditInstalasi = () => {
       }
     };
 
-    const getIdCont = async () => {
+    const fetchUserData = async () => {
       try {
         axios
-          .get(`${import.meta.env.VITE_API_URL}api/get-id-contract`)
+          .get(`${import.meta.env.VITE_API_URL}api/get-users`)
           .then((res) => {
-            console.log(res);
-            if (res.data.length === 0) {
-              setIdCont(null);
-            } else {
+            if (res.data.length >= 0) {
               const data = res.data;
-              setIdCont(data);
+              setDataUser(data);
             }
           });
       } catch (err) {
@@ -112,8 +106,8 @@ const EditInstalasi = () => {
       }
     };
 
-    fetchInstalasiById();
-    getIdCont();
+    fetchAreaById();
+    fetchUserData();
   }, []);
 
   const onSubmit = async (values) => {
@@ -128,18 +122,18 @@ const EditInstalasi = () => {
 
       // Submit main form
       const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}api/edit-instalasi?id=${id}`,
+        `${import.meta.env.VITE_API_URL}api/edit-area?id=${id}`,
         data,
         { timeout: 5000 }
       );
 
       if (!response.data.ok) {
-        throw new Error("Gagal mengubah data instalasi.");
+        throw new Error("Gagal mengubah data Area.");
       } else {
         setRetry(false);
-        navigate("/instalasi", {
+        navigate("/area", {
           state: {
-            message: "Data Instalasi Berhasil Diubah!",
+            message: "Data Area Berhasil Diubah!",
             severity: "success",
           },
         });
@@ -171,7 +165,7 @@ const EditInstalasi = () => {
   return (
     <Paper sx={{ padding: 3 }} elevation={4}>
       <Typography variant="h5" marginBottom={"1.5em"} gutterBottom>
-        Edit Instalasi
+        Edit Area
       </Typography>
       <LocalizationProvider dateAdapter={AdapterDayjs}>
         <form
@@ -180,70 +174,78 @@ const EditInstalasi = () => {
         >
           <Grid container spacing={5} marginY={"2em"} alignItems="center">
             <Grid size={{ xs: 12, md: 6 }}>
-              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="id_kontrak">
-                No. Kontrak
+              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="kode_area">
+                Kode Area
               </Typography>
               <TextField
                 variant="outlined"
                 fullWidth
-                {...register("id_kontrak")}
-                error={!!errors.id_kontrak}
-                helperText={errors.id_kontrak?.message}
+                {...register("kode_area")}
+                error={!!errors.kode_area}
+                helperText={errors.kode_area?.message}
               />
             </Grid>
 
             <Grid size={{ xs: 12, md: 6 }}>
-              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="no_seri">
-                No. Seri
+              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="nama_area">
+                Nama Area
               </Typography>
               <TextField
                 variant="outlined"
                 fullWidth
-                {...register("no_seri")}
-                error={!!errors.no_seri}
-                helperText={errors.no_seri?.message}
+                {...register("nama_area")}
+                error={!!errors.nama_area}
+                helperText={errors.nama_area?.message}
               />
             </Grid>
 
             <Grid size={{ xs: 12, md: 6 }}>
-              <InputLabel id="tgl_instalasi">Tanggal Instalasi</InputLabel>
-              <Controller
-                name="tgl_instalasi"
-                control={control}
-                render={({ field }) => (
-                  <DatePicker
-                    {...field}
-                    // minDate={new Date(minDateTime)}
-                    // onChange={(newValue) =>
-                    //   handleDateChange("waktu_sampai", newValue)
-                    // }
-                    format="DD-MM-YYYY"
-                    slotProps={{
-                      textField: {
-                        fullWidth: true,
-                        error: !!errors.tgl_instalasi,
-                        helperText: errors.tgl_instalasi?.message,
-                      },
-                    }}
-                  />
-                )}
-              />
-            </Grid>
-
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="lokasi">
-                Lokasi
+              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="groups">
+                Group
               </Typography>
               <TextField
                 variant="outlined"
+                maxLength="5"
                 fullWidth
-                multiline
-                rows={3}
-                {...register("lokasi")}
-                error={!!errors.lokasi}
-                helperText={errors.lokasi?.message}
+                {...register("groups")}
+                error={!!errors.groups}
+                helperText={errors.groups?.message}
               />
             </Grid>
+
+            {dataUser && (
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Controller
+                  name="id_supervisor"
+                  control={control}
+                  rules={{ required: "Supervisor is required" }} // Add your validation rules here
+                  render={({ field }) => (
+                    <FormControl fullWidth error={!!errors.id_supervisor}>
+                      <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
+                        Pilih Supervisor
+                      </Typography>
+                      <Select
+                        id="supervisor-select"
+                        variant="outlined"
+                        {...field}
+                        displayEmpty
+                      >
+                        {dataUser.map((item) => (
+                          <MenuItem key={item.id} value={item.id}>
+                            {item.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      {errors.id_supervisor && (
+                        <FormHelperText>
+                          {errors.id_supervisor?.message}
+                        </FormHelperText>
+                      )}
+                    </FormControl>
+                  )}
+                />
+              </Grid>
+            )}
           </Grid>
 
           {/* Alert notifications */}
@@ -290,4 +292,4 @@ const EditInstalasi = () => {
   );
 };
 
-export default EditInstalasi;
+export default EditArea;

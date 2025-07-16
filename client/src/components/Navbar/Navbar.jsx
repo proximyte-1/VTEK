@@ -15,26 +15,40 @@ import { useNavigate } from "react-router-dom";
 import logo from "../../assets/logo.png";
 import { ExpandLess, ExpandMore } from "@mui/icons-material";
 import { Collapse, List, ListItemButton } from "@mui/material";
+import { useAuth } from "../../utils/auth";
 
 const pages = [
   { endpoint: "", name: "Home" },
   { endpoint: "master", name: "Master" },
   { endpoint: "flk", name: "Laporan Kerja" },
   { endpoint: "report", name: "Report" },
-  { endpoint: "login", name: "Login" },
+  { endpoint: "login", name: "User" },
 ];
-const settings = ["Profile", "Logout"];
+const settings = [
+  { endpoint: "/profile", name: "Profile" },
+  { endpoint: "/logout", name: "Logout" },
+];
+
 const menu_flk = [
   { name: "Dengan Barang", endpoint: "/flk" },
   { name: "Tanpa Barang", endpoint: "/flk-no-barang" },
 ];
+
 const menu_master = [
   { name: "User", endpoint: "/users" },
   { name: "Kontrak", endpoint: "/contract" },
   { name: "Instalasi", endpoint: "/instalasi" },
-  { name: "Area dan Teknisi", endpoint: "/area" },
+  { name: "Area", endpoint: "/area" },
   { name: "Global Settings", endpoint: "/settings" },
 ];
+
+// const menu_report = [
+//   { name: "Per Periode", endpoint: "/users" },
+//   { name: "Per ", endpoint: "/contract" },
+//   { name: "Instalasi", endpoint: "/instalasi" },
+//   { name: "Area", endpoint: "/area" },
+//   { name: "Global Settings", endpoint: "/settings" },
+// ];
 
 function Navbar() {
   const [anchorElNav, setAnchorElNav] = useState(null);
@@ -42,10 +56,18 @@ function Navbar() {
   const [anchorElFLK, setAnchorElFLK] = useState(null);
   const [anchorElMaster, setAnchorElMaster] = useState(null);
   const [openSubMenu, setOpenSubMenu] = useState(false);
+
+  // Destructure authentication state and functions from the context
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
 
   const handleOpenNavMenu = (event) => {
     setAnchorElNav(event.currentTarget);
+  };
+  const handleLogout = async () => {
+    console.log(user);
+    // return;
+    logout();
   };
   const handleOpenUserMenu = (event) => {
     setAnchorElUser(event.currentTarget);
@@ -173,6 +195,8 @@ function Navbar() {
                     handleOpenFLKMenu(e);
                   } else if (data.endpoint === "master") {
                     handleOpenMasterMenu(e);
+                  } else if (data.endpoint === "login") {
+                    console.log(user);
                   } else {
                     navigate(data.endpoint);
                   }
@@ -240,12 +264,14 @@ function Navbar() {
             </Menu>
           </Box>
 
-          <Button>Login</Button>
-
           <Box sx={{ flexGrow: 0 }}>
             <Tooltip title="Open settings">
               <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
-                <Avatar alt="Remy Sharp" src="/static/images/avatar/2.jpg" />
+                <Avatar
+                  alt="Remy Sharp"
+                  referrerPolicy="no-referrer"
+                  src={user?._json?.picture || "/static/images/avatar/2.jpg"}
+                />
               </IconButton>
             </Tooltip>
             <Menu
@@ -264,10 +290,13 @@ function Navbar() {
               open={Boolean(anchorElUser)}
               onClose={handleCloseUserMenu}
             >
-              {settings.map((setting) => (
-                <MenuItem key={setting} onClick={handleCloseUserMenu}>
-                  <Typography sx={{ textAlign: "center" }}>
-                    {setting}
+              {settings.map((data) => (
+                <MenuItem key={data.endpoint} onClick={handleCloseUserMenu}>
+                  <Typography
+                    sx={{ textAlign: "center" }}
+                    onClick={() => handleLogout()}
+                  >
+                    {data.name}
                   </Typography>
                 </MenuItem>
               ))}

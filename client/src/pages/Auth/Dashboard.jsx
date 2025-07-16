@@ -9,9 +9,7 @@ const Dashboard = () => {
     axios
       .get("/api/user")
       .then((res) => {
-        console.log(res);
-        console.log(res.data);
-        setUser(res.data);
+        setUser((u) => res.data._json);
       })
       .catch((err) => {
         console.error(err);
@@ -23,19 +21,25 @@ const Dashboard = () => {
     window.location.href = "http://localhost:3001/auth/logout";
   };
 
+  const handleTest = () => {
+    console.log(user.photos[0]);
+  };
+
   if (!user) return <p>Loading...</p>;
 
   return (
     <div style={{ textAlign: "center", marginTop: "50px" }}>
-      <h2>Welcome, {user.displayName}</h2>
+      <h2>Welcome, {user.name}</h2>
       <img
-        src={user.photos?.[0]?.value}
+        src={user.picture}
         alt="User profile"
+        referrerPolicy="no-referrer"
         style={{ width: 100, borderRadius: "50%" }}
       />
-      <p>Email: {user.emails[0].value}</p>
+      <p>Email: {user.email}</p>
       <br />
       <button onClick={handleLogout}>Logout</button>
+      <button onClick={handleTest}>test</button>
     </div>
   );
 };

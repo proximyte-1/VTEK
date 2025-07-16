@@ -16,7 +16,7 @@ import {
   Box,
 } from "@mui/material";
 import { useAlert } from "../../utils/alert";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import axios from "axios";
@@ -26,27 +26,38 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { maxDateTime, minDateTime, selectService } from "../../utils/constants";
 import * as yup from "yup";
 import MultipleItemTableInput from "../../components/MultipleTableInput/MultipleItemTableInput";
+import MultipleItemTableSelect from "../../components/MultipleTableSelect/MultipleItemTableSelect";
+import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
+import { displayValue } from "../../utils/helpers";
 
-const AddInstalasi = () => {
+const PindahInstalasi = () => {
+  const { id } = useParams();
   const navigate = useNavigate();
 
   const { alert, showAlert, closeAlert } = useAlert();
   const [loading, setLoading] = useState(false);
   const [idCont, setIdCont] = useState();
+  const [select, setSelect] = useState();
   const [retry, setRetry] = useState(false);
 
   const schema = useMemo(() => {
     return yup.object().shape({
-      id_kontrak: yup
-        .string()
-        .required()
-        .test("id-exists", "No Kontrak Tidak Ditemukan", function (value) {
-          if (!value || !idCont) return false;
-          return idCont.some((item) => item.id === value);
-        }),
-      no_seri: yup.array().required(),
-      tgl_instalasi: yup.date().required(),
-      // lokasi: yup.string().required(),
+      no_seri: yup
+        .array()
+        // You MUST add .default([]) here
+        .default([])
+        // Optional: Add validation rules for individual items in the array
+        .of(
+          yup.object().shape({
+            id: yup.string().required(), // IDs are generated, but schema should know
+            no_seri: yup.string().required("No. Seri is required"),
+            lokasi: yup.string().required("Lokasi is required"),
+            tgl_instalasi: yup
+              .string()
+              .required("Tanggal Instalasi is required"),
+          })
+        )
+        .min(1, "Minimal 1 mesin di masukkan."), // Example: minimum 1 item,
     });
   }, [idCont]);
 
@@ -63,24 +74,30 @@ const AddInstalasi = () => {
     resolver: yupResolver(schema),
     context: { isEdit: false },
     defaultValues: {
-      id_kontrak: "",
       no_seri: [],
-      tgl_instalasi: null,
-      // lokasi: "",
     },
   });
-
-  const watchedNoSeri = watch("no_seri");
 
   useEffect(() => {
     try {
       axios
-        .get(`${import.meta.env.VITE_API_URL}api/get-id-contract`)
+        .get(
+          `${
+            import.meta.env.VITE_API_URL
+          }api/get-instalasi-by-contract?id=${id}`
+        )
         .then((res) => {
-          if (res.data.length === 0) {
+          const data = res.data;
+          const arraySelect = data.map((item) => ({
+            id: parseInt(item.id), // Convert id to a number if it's a string
+            serial: item.no_seri,
+          }));
+
+          if (data.length === 0) {
             setIdCont(null);
+            setSelect(null);
           } else {
-            const data = res.data;
+            setSelect(arraySelect);
             setIdCont(data);
           }
         });
@@ -119,34 +136,39 @@ const AddInstalasi = () => {
   };
 
   const onSubmit = async (values) => {
-    setLoading(true);
+    // setLoading(true);
     try {
       const data = new FormData();
 
-      const contract = getValues("id_kontrak");
-      const seri = getValues("no_seri");
+      // const seri = getValues("no_seri");
 
-      const checked = await checkNoSeri(contract, seri);
-      if (!checked) {
-        showAlert(
-          "No Kontrak dan No Seri tidak cocok. Tolong cek kembali.",
-          "error"
-        );
-        return;
-      }
+      // const checked = await checkNoSeri(contract, seri);
+      // if (!checked) {
+      //   showAlert(
+      //     "No Kontrak dan No Seri tidak cocok. Tolong cek kembali.",
+      //     "error"
+      //   );
+      //   return;
+      // }
 
       // Append all fields except special ones
       Object.entries(values).forEach(([key, value]) => {
+        // data.append(key, value);
         if (key === "no_seri") {
-          data.append(key, JSON.stringify(value));
-        } else {
-          data.append(key, value);
+          const format = value.map((item) => ({
+            id_contract: id,
+            no_seri: item.no_seri_label,
+            lokasi: item.lokasi,
+            tgl_instalasi: item.tgl_instalasi,
+          }));
+
+          data.append(key, JSON.stringify(format));
         }
       });
 
       // Submit main form
       const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}api/create-instalasi`,
+        `${import.meta.env.VITE_API_URL}api/create-pindah-instalasi`,
         data,
         { timeout: 5000 }
       );
@@ -155,7 +177,7 @@ const AddInstalasi = () => {
         throw new Error("Gagal menyimpan data instalasi.");
       } else {
         setRetry(false);
-        navigate("/instalasi", {
+        navigate(`/contract/view/${id}`, {
           state: {
             message: "Data instalasi Berhasil Ditambahkan!",
             severity: "success",
@@ -176,6 +198,7 @@ const AddInstalasi = () => {
   };
 
   const onInvalid = (errors) => {
+    console.log(errors);
     showAlert(
       "Terjadi kesalahan pada input data mohon check kembali.",
       "error"
@@ -191,102 +214,33 @@ const AddInstalasi = () => {
       <Typography variant="h5" marginBottom={"1.5em"} gutterBottom>
         New Instalasi
       </Typography>
-      <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <LocalizationProvider dateAdapter={AdapterDateFns}>
         <form
           onSubmit={handleSubmit(onSubmit, onInvalid)}
           encType="multipart/form-data"
         >
           <Grid container spacing={5} marginY={"2em"} alignItems="center">
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="id_kontrak">
-                No. Kontrak
+            {/* <Grid size={{ xs: 12, md: 6 }}>
+              <Typography sx={{ fontWeight: "bold", marginX: 1 }}>
+                No. Kontrak : {displayValue(id)}
               </Typography>
-              <TextField
-                variant="outlined"
-                fullWidth
-                {...register("id_kontrak")}
-                error={!!errors.id_kontrak}
-                helperText={errors.id_kontrak?.message}
-              />
-            </Grid>
-
-            <Grid size={{ xs: 12, md: 6 }}>
-              <InputLabel id="tgl_instalasi">Tanggal Instalasi</InputLabel>
-              <Controller
-                name="tgl_instalasi"
-                control={control}
-                render={({ field }) => (
-                  <DatePicker
-                    {...field}
-                    // minDate={new Date(minDateTime)}
-                    // onChange={(newValue) =>
-                    //   handleDateChange("waktu_sampai", newValue)
-                    // }
-                    format="DD-MM-YYYY"
-                    slotProps={{
-                      textField: {
-                        fullWidth: true,
-                        error: !!errors.tgl_instalasi,
-                        helperText: errors.tgl_instalasi?.message,
-                      },
-                    }}
-                  />
-                )}
-              />
-            </Grid>
+            </Grid> */}
 
             <Grid container size={{ xs: 12, md: 12 }}>
               <Controller
-                name="no_seri" // This name maps to the 'lineItems' in your Yup schema and form data
+                name="no_seri"
                 control={control}
                 render={({ field }) => (
-                  <MultipleItemTableInput
-                    value={field.value} // Pass the array of items from RHF's state to your component
-                    onChange={field.onChange} // Pass RHF's onChange to your component for updates
+                  <MultipleItemTableSelect
+                    value={field.value}
+                    onChange={field.onChange}
+                    noSeriOptions={select}
+                    optionValueKey="id"
+                    optionLabelKey="serial"
                   />
                 )}
               />
-              {/* Display error message for the entire lineItems array if validation fails */}
             </Grid>
-            {errors.no_seri && (
-              <Typography color="error" variant="body1" sx={{ mt: 0.5, ml: 2 }}>
-                {errors.no_seri.message}
-              </Typography>
-            )}
-            {/* Optional: Display current form state for debugging */}
-            <Box
-              sx={{
-                mt: 4,
-                p: 2,
-                bgcolor: "#f0f0f0",
-                borderRadius: 1,
-                overflowX: "auto",
-              }}
-            >
-              <Typography variant="h6" gutterBottom>
-                Current Form Data (from `useForm` state):
-              </Typography>
-              <pre
-                style={{
-                  whiteSpace: "pre-wrap",
-                  wordWrap: "break-word",
-                }}
-              >
-                {JSON.stringify(watchedNoSeri, null, 2)}
-              </pre>
-              <Typography variant="h6" sx={{ mt: 2 }} gutterBottom>
-                Form Errors:
-              </Typography>
-              <pre
-                style={{
-                  whiteSpace: "pre-wrap",
-                  wordWrap: "break-word",
-                  color: "red",
-                }}
-              >
-                {JSON.stringify(errors, null, 2)}
-              </pre>
-            </Box>
           </Grid>
 
           {/* Alert notifications */}
@@ -333,4 +287,4 @@ const AddInstalasi = () => {
   );
 };
 
-export default AddInstalasi;
+export default PindahInstalasi;

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   TextField,
   Button,
@@ -34,18 +34,124 @@ import FileUpload from "../components/FileUpload/FileUpload";
 import { useAlert } from "../utils/alert";
 import axios from "axios";
 import { Controller, useForm } from "react-hook-form";
+import * as yup from "yup";
 import { yupResolver } from "@hookform/resolvers/yup";
-import { columnsBarang, displayValue, schemaNoRep } from "../utils/helpers";
 import {
+  columnsBarang,
+  displayFormatDate,
+  displayValue,
+} from "../utils/helpers";
+import {
+  maxDateTime,
+  minDateTime,
   selectKeluhan,
   selectProblem,
   selectStatusCall,
   selectStatusResult,
 } from "../utils/constants";
+import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 
 const Edit = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+
+  const [barang, setDataBarang] = useState([]);
+  const [customer, setDataCustomer] = useState([]);
+  const [searched, setSearched] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [expand, setExpand] = useState(true);
+  const [lastService, setLastService] = useState([]);
+  const [contract, setContract] = useState([]);
+  const [instalasi, setInstalasi] = useState([]);
+  const { alert, showAlert, closeAlert } = useAlert();
+  const [retry, setRetry] = useState(false);
+
+  const schemaNoRep = useMemo(() => {
+    return yup.object().shape({
+      no_rep: yup.string().required(),
+      no_call: yup.string().required(),
+      no_lap: yup.string().required(),
+      pelapor: yup.string().required(),
+      waktu_call: yup.date().required(),
+      waktu_dtg: yup.date().required(),
+      status_call: yup.string().required(),
+      keluhan: yup.string().required(),
+      kat_keluhan: yup.string().required(),
+      problem: yup.string().required(),
+      kat_problem: yup.string().required(),
+      solusi: yup.string().required(),
+      waktu_mulai: yup.date().required(),
+      waktu_selesai: yup
+        .date()
+        .min(
+          yup.ref("waktu_mulai"),
+          "Waktu selesai tidak boleh sebelum waktu mulai"
+        ),
+      count_bw: yup
+        .string()
+        .required()
+        .test(
+          "not-less-than-previous-bw",
+          `Tidak boleh kurang dari data sebelumnya (${lastService.count_bw}).`,
+          function (value) {
+            const { count_bw } = lastService;
+            const n_count = Number(count_bw);
+            const n_val = Number(value);
+
+            if (n_val === undefined || n_val === null) return false;
+            return n_val >= n_count;
+          }
+        ),
+      count_cl: yup
+        .string()
+        .required()
+        .test(
+          "not-less-than-previous-cl",
+          `Tidak boleh kurang dari data sebelumnya (${lastService.count_cl}).`,
+          function (value) {
+            const { count_cl } = lastService;
+            const n_count = Number(count_cl);
+            const n_val = Number(value);
+
+            if (n_val === undefined || n_val === null) return false;
+            return n_val >= n_count;
+          }
+        ),
+      saran: yup.string().required(),
+      status_res: yup.string().required(),
+      rep_ke: yup.number().nullable(),
+      pic: yup.mixed().when("$isEdit", {
+        is: false, // when not editing, i.e., adding
+        then: (schema) =>
+          schema
+            .required("File bukti harus diunggah.")
+            .test(
+              "fileType",
+              "Hanya file gambar (jpg, png, jpeg, pdf) yang diperbolehkan.",
+              (value) => {
+                return (
+                  value &&
+                  [
+                    "image/jpeg",
+                    "image/png",
+                    "image/jpg",
+                    "application/pdf",
+                  ].includes(value.type)
+                );
+              }
+            )
+            .test(
+              "fileSize",
+              `Ukuran file maksimal ${import.meta.env.VITE_MAX_FILE_MB}MB.`,
+              (value) => {
+                const max_byte = import.meta.env.VITE_MAX_FILE_MB * 1024 * 1024;
+                return value && value.size <= max_byte;
+              }
+            ),
+        otherwise: (schema) => schema.nullable().notRequired(),
+      }),
+    });
+  }, [lastService]);
 
   const {
     register,
@@ -84,13 +190,6 @@ const Edit = () => {
     },
   });
 
-  const [barang, setDataBarang] = useState([]);
-  const [customer, setDataCustomer] = useState([]);
-  const [searched, setSearched] = useState(true);
-  const [loading, setLoading] = useState(false);
-  const [expand, setExpand] = useState(true);
-  const { alert, showAlert, closeAlert } = useAlert();
-
   let statusRes = watch("status_res");
 
   const handleFileSelect = (file) => {
@@ -117,15 +216,32 @@ const Edit = () => {
                 "waktu_selesai",
               ].includes(key)
             ) {
-              parsedValue = value ? dayjs(value) : null;
+              parsedValue = value ? new Date(value) : null;
             }
 
             setValue(key, parsedValue, { shouldDirty: true });
           });
 
           // Fetch related data
-          const cus = await fetchDataBarang(datas.no_rep);
-          await fetchContRes(cus, datas.no_seri);
+          const customer = await fetchDataBarang(datas.no_rep);
+          if (customer) {
+            const dataLastService = await fetchLastService(
+              displayValue(customer["d:Serial_No"])
+            );
+
+            const dataContract = await fetchDataContract(
+              displayValue(customer["d:Sell_to_Customer_No"])
+            );
+
+            const dataInstalasi = await fetchDataInstalasi(
+              displayValue(customer["d:Serial_No"])
+            );
+
+            await fetchContRes(
+              customer["d:Sell_to_Customer_No"],
+              customer["d:Serial_No"]
+            );
+          }
           setExpand(false);
         } else {
           console.error("No data found or no_rep is missing");
@@ -142,6 +258,85 @@ const Edit = () => {
 
     fetchFlkData(id);
   }, [id]);
+
+  const fetchLastService = async (no_seri) => {
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}api/get-last-service`,
+        {
+          params: {
+            no_seri: no_seri,
+          },
+        }
+      );
+
+      const data = response.data;
+
+      if (data.length <= 0) {
+        setLastService({
+          count_bw: 0,
+          count_cl: 0,
+          waktu_selesai: null,
+        });
+        return;
+      }
+
+      setLastService(data[0]);
+    } catch (error) {
+      console.error("Error fetching last service:", error);
+      showAlert("Gagal mengambil service sebelumnya", "error");
+    }
+  };
+
+  const fetchDataContract = async (no_cus) => {
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}api/get-contract-lk`,
+        {
+          params: {
+            no_cus: no_cus,
+          },
+        }
+      );
+
+      const data = response.data;
+
+      if (data.length <= 0) {
+        setContract(null);
+        return;
+      }
+
+      setContract(data[0]);
+    } catch (error) {
+      console.error("Error fetching contract:", error);
+      showAlert("Gagal mengambil data kontrak", "error");
+    }
+  };
+
+  const fetchDataInstalasi = async (no_seri) => {
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}api/get-instalasi-lk`,
+        {
+          params: {
+            no_seri: no_seri,
+          },
+        }
+      );
+
+      const data = response.data;
+
+      if (data.length <= 0) {
+        setInstalasi(null);
+        return;
+      }
+
+      setInstalasi(data[0]);
+    } catch (error) {
+      console.error("Error fetching instalation:", error);
+      showAlert("Gagal mengambil data instalasi", "error");
+    }
+  };
 
   const fetchDataBarang = async (id) => {
     try {
@@ -206,23 +401,14 @@ const Edit = () => {
         }
       });
 
-      // data.forEach((value, key) => {
-      //   console.log(key + " = " + value);
-      // });
-
-      // return;
-
       // Submit main form
       const response = await axios.post(
         `${import.meta.env.VITE_API_URL}api/edit-flk?${id}`,
         data
       );
-      const { data: result } = response;
-      console.log(response);
-      console.log(response.ok);
 
       if (response.data.ok) {
-        setLoading(false);
+        setRetry(false);
         navigate("/flk", {
           state: {
             message: "Data Laporan Kerja Berhasil Diubah!",
@@ -234,12 +420,22 @@ const Edit = () => {
       }
     } catch (error) {
       console.error("Error submitting data:", error);
-      showAlert("Terjadi kesalahan saat mengirim data.", "error");
+      if (error.status === 408 || error.code === "ECONNABORTED") {
+        showAlert("Request timed out. Tolong coba kembali.", "error");
+        setRetry(true);
+      } else {
+        showAlert("Terjadi kesalahan dalam proses input.", "error");
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
   const onInvalid = (errors) => {
-    console.log("Form has errors:", errors);
+    showAlert(
+      "Terjadi kesalahan pada input data mohon check kembali.",
+      "error"
+    );
   };
 
   // Theme and media query for responsiveness
@@ -247,11 +443,11 @@ const Edit = () => {
   const isSmallScreen = useMediaQuery(theme.breakpoints.down("sm"));
 
   return (
-    <Paper sx={{ padding: 3 }} elevation={4}>
+    <Paper sx={{ padding: 3, marginBottom: 5 }} elevation={4}>
       <Typography variant="h5" marginBottom={"1.5em"} gutterBottom>
         Edit Form Laporan Kerja
       </Typography>
-      <LocalizationProvider dateAdapter={AdapterDayjs}>
+      <LocalizationProvider dateAdapter={AdapterDateFns}>
         <form
           onSubmit={handleSubmit(onSubmit, onInvalid)}
           encType="multipart/form-data"
@@ -267,7 +463,7 @@ const Edit = () => {
                 error={!!errors.no_rep}
                 helperText={errors.no_rep?.message}
                 type="number"
-                aria-readonly
+                disabled
                 slotProps={{
                   input: {
                     startAdornment: (
@@ -350,30 +546,42 @@ const Edit = () => {
                   </AccordionSummary>
                   <AccordionDetails>
                     <Grid container spacing={5}>
-                      {/* Row 1 */}
+                      {/* Row    */}
                       <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-                        <Typography>Kode Mesin :</Typography>
                         <Typography>
-                          Seri : {displayValue(customer?.["d:Serial_No"])}
+                          No Seri : {displayValue(customer?.["d:Serial_No"])}
                         </Typography>
                         <Typography>
                           Nama Mesin :{" "}
                           {displayValue(customer?.["d:Machine_Name"])}
                         </Typography>
-                      </Grid>
-                      {/* Row 2 */}
-                      <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                         <Typography>
                           Type : {displayValue(customer?.["d:Machine_Code"])}
                         </Typography>
-                        <Typography>Tanggal Instalasi :</Typography>
-                        <Typography>Tanggal Kontrak :</Typography>
                       </Grid>
+
+                      {/* Row 2 */}
+                      <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                        <Typography>
+                          Tanggal Instalasi :
+                          {displayFormatDate(instalasi?.tgl_instalasi)}
+                        </Typography>
+                        <Typography>
+                          Tanggal Kontrak :{" "}
+                          {displayFormatDate(contract?.tgl_contract_exp)}
+                        </Typography>
+                        <Typography>
+                          Tipe Service :{" "}
+                          {displayFormatDate(contract?.type_service)}
+                        </Typography>
+                      </Grid>
+
                       {/* Row 3 */}
                       <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-                        <Typography>Type Service :</Typography>
-                        <Typography>Masa :</Typography>
-                        <Typography>Tanggal Akhir Service :</Typography>
+                        <Typography>
+                          Tanggal Akhir Service :{" "}
+                          {displayFormatDate(lastService?.waktu_selesai)}
+                        </Typography>
                       </Grid>
                     </Grid>
                   </AccordionDetails>
@@ -501,7 +709,10 @@ const Edit = () => {
                           render={({ field }) => (
                             <DateTimePicker
                               ampm={false}
+                              minDateTime={new Date(minDateTime)}
+                              maxDateTime={new Date(maxDateTime)}
                               {...field}
+                              format="dd-MM-yy HH:mm"
                               slotProps={{
                                 textField: {
                                   fullWidth: true,
@@ -524,41 +735,11 @@ const Edit = () => {
                             <DateTimePicker
                               ampm={false}
                               {...field}
+                              minDateTime={new Date(minDateTime)}
+                              maxDateTime={new Date(maxDateTime)}
+                              format="dd-MM-yy HH:mm"
                               onChange={(newValue) => {
-                                const now = dayjs();
-                                const diffInDays = now.diff(
-                                  dayjs(newValue),
-                                  "day"
-                                );
                                 const callTime = watch("waktu_call");
-
-                                if (
-                                  diffInDays <
-                                  import.meta.env.VITE_FORWARD_PENJADWALAN_DAYS
-                                ) {
-                                  showAlert(
-                                    `Waktu tidak boleh lebih dari ${
-                                      import.meta.env
-                                        .VITE_FORWARD_PENJADWALAN_DAYS
-                                    } hari ke depan.`,
-                                    "error"
-                                  );
-                                  return;
-                                }
-
-                                if (
-                                  diffInDays >
-                                  import.meta.env.VITE_BACKDATE_DAYS
-                                ) {
-                                  showAlert(
-                                    `Waktu tidak boleh lebih dari ${
-                                      import.meta.env.VITE_BACKDATE_DAYS
-                                    } hari ke belakang.`,
-                                    "error"
-                                  );
-                                  return;
-                                }
-
                                 if (
                                   callTime &&
                                   dayjs(newValue).isBefore(dayjs(callTime))
@@ -676,23 +857,6 @@ const Edit = () => {
                       <Grid size={{ xs: 12, md: 6 }}>
                         <Typography
                           sx={{ color: "rgba(0, 0, 0, 0.6)" }}
-                          id="no_lap"
-                        >
-                          No. Laporan
-                        </Typography>
-                        <TextField
-                          variant="outlined"
-                          fullWidth
-                          type="number"
-                          {...register("no_lap")}
-                          error={!!errors.no_lap}
-                          helperText={errors.no_lap?.message}
-                        />
-                      </Grid>
-
-                      <Grid size={{ xs: 12, md: 6 }}>
-                        <Typography
-                          sx={{ color: "rgba(0, 0, 0, 0.6)" }}
                           id="problem"
                         >
                           Problem
@@ -761,41 +925,10 @@ const Edit = () => {
                           render={({ field }) => (
                             <DateTimePicker
                               ampm={false}
+                              minDateTime={new Date(minDateTime)}
+                              maxDateTime={new Date(maxDateTime)}
+                              format="dd-MM-yy HH:mm"
                               {...field}
-                              onChange={(newValue) => {
-                                const now = dayjs();
-                                const diffInDays = now.diff(
-                                  dayjs(newValue),
-                                  "day"
-                                );
-
-                                if (
-                                  diffInDays < import.meta.env.VITE_FORWARD_DAYS
-                                ) {
-                                  showAlert(
-                                    `Waktu tidak boleh lebih dari ${
-                                      import.meta.env.VITE_FORWARD_DAYS
-                                    } hari ke depan.`,
-                                    "error"
-                                  );
-                                  return;
-                                }
-
-                                if (
-                                  diffInDays >
-                                  import.meta.env.VITE_BACKDATE_DAYS
-                                ) {
-                                  showAlert(
-                                    `Waktu tidak boleh lebih dari ${
-                                      import.meta.env.VITE_BACKDATE_DAYS
-                                    } hari ke belakang.`,
-                                    "error"
-                                  );
-                                  return;
-                                }
-
-                                field.onChange(newValue); // still update the form
-                              }}
                               slotProps={{
                                 textField: {
                                   fullWidth: true,
@@ -819,38 +952,11 @@ const Edit = () => {
                             <DateTimePicker
                               ampm={false}
                               {...field}
+                              minDateTime={new Date(minDateTime)}
+                              maxDateTime={new Date(maxDateTime)}
+                              format="dd-MM-yy HH:mm"
                               onChange={(newValue) => {
-                                const now = dayjs();
-                                const diffInDays = now.diff(
-                                  dayjs(newValue),
-                                  "day"
-                                );
                                 const mulaiTime = watch("waktu_mulai");
-
-                                if (
-                                  diffInDays < import.meta.env.VITE_FORWARD_DAYS
-                                ) {
-                                  showAlert(
-                                    `Waktu tidak boleh lebih dari ${
-                                      import.meta.env.VITE_FORWARD_DAYS
-                                    } hari ke depan.`,
-                                    "error"
-                                  );
-                                  return;
-                                }
-
-                                if (
-                                  diffInDays >
-                                  import.meta.env.VITE_BACKDATE_DAYS
-                                ) {
-                                  showAlert(
-                                    `Waktu tidak boleh lebih dari ${
-                                      import.meta.env.VITE_BACKDATE_DAYS
-                                    } hari ke belakang.`,
-                                    "error"
-                                  );
-                                  return;
-                                }
 
                                 if (
                                   mulaiTime &&
@@ -1088,6 +1194,8 @@ const Edit = () => {
               >
                 {loading ? (
                   <CircularProgress size={20} color="inherit" />
+                ) : retry ? (
+                  "Retry"
                 ) : (
                   "Submit"
                 )}

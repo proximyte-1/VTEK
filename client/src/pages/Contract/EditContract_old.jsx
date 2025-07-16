@@ -19,22 +19,22 @@ import {
   Box,
 } from "@mui/material";
 import { useAlert } from "../../utils/alert";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import axios from "axios";
-import dayjs from "dayjs";
+import * as yup from "yup";
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { maxDateTime, minDateTime, selectService } from "../../utils/constants";
-import * as yup from "yup";
-import { displayValue } from "../../utils/helpers";
-import { ExpandMoreRounded } from "@mui/icons-material";
-import MultipleItemTableInput from "../../components/MultipleTableInput/MultipleItemTableInput";
-import e from "connect-timeout";
+import dayjs from "dayjs";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
+import { ExpandMoreRounded } from "@mui/icons-material";
+import { displayValue } from "../../utils/helpers";
+import MultipleItemTableInput from "../../components/MultipleTableInput/MultipleItemTableInput";
 
-const AddContract = () => {
+const EditContract = () => {
+  const { id } = useParams();
   const navigate = useNavigate();
 
   const { alert, showAlert, closeAlert } = useAlert();
@@ -58,9 +58,6 @@ const AddContract = () => {
             id: yup.string().required(), // IDs are generated, but schema should know
             no_seri: yup.string().required("No. Seri is required"),
             lokasi: yup.string().required("Lokasi is required"),
-            tgl_instalasi: yup
-              .string()
-              .required("Tanggal Instalasi is required"),
           })
         )
         .min(1, "Minimal 1 mesin di masukkan."), // Example: minimum 1 item,
@@ -105,33 +102,68 @@ const AddContract = () => {
 
   // Optional: Watch the lineItems field to display its current value
   const watchedNoSeri = watch("no_seri");
-  // const noSeri = watch("no_seri");
 
-  // useEffect(() => {
-  //   if (noSeri) {
-  //     axios
-  //       .get(
-  //         `${
-  //           import.meta.env.VITE_API_URL
-  //         }api/get-last-contract?no_seri=${noSeri}`
-  //       )
-  //       .then((res) => {
-  //         if (res.data.length === 0) {
-  //           setLastCont(null);
-  //         } else {
-  //           const rawDate = res.data?.[0]?.tgl_contract;
-  //           const parsed = dayjs(rawDate);
-  //           setLastCont(parsed);
-  //         }
-  //       });
-  //   }
-  // }, [noSeri]);
+  useEffect(() => {
+    const fetchContractById = async () => {
+      try {
+        const response = await axios.get(
+          `${import.meta.env.VITE_API_URL}api/get-contract-by-id?id=${id}`
+        );
 
-  const handleSearch = async () => {
-    setLoading(true);
+        const data = response.data[0];
 
+        Object.entries(data).forEach(([key, value]) => {
+          let parsedValue = value;
+
+          if (["tgl_contract", "tgl_contract_exp"].includes(key)) {
+            parsedValue = value ? new Date(value) : null;
+          }
+          setValue(key, parsedValue, { shouldDirty: true });
+        });
+
+        fecthDataMesin();
+        fetchCustomerData(data.no_cus);
+      } catch (err) {
+        console.error("No data found or is missing");
+        showAlert("Gagal mendapat data kontrak tidak ditemukan.", "error");
+      }
+    };
+
+    fetchContractById();
+  }, [id]);
+
+  const fetchLastContract = async (no_cus) => {
     try {
-      const noCus = getValues("no_cus");
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}api/get-last-contract`,
+        {
+          params: {
+            no_cus: no_cus,
+          },
+        }
+      );
+
+      const data = response.data;
+
+      if (data.length <= 0) {
+        setLastCont(null);
+        return;
+      }
+
+      if (data?.[0]?.tgl_contract_exp && data.length > 1) {
+        setLastCont(data?.[0]?.tgl_contract);
+      } else {
+        setLastCont(null);
+      }
+    } catch (error) {
+      console.error("Error fetching last contract:", error);
+      showAlert("Gagal mengambil service sebelumnya", "error");
+    }
+  };
+
+  const fetchCustomerData = async (no_cus) => {
+    try {
+      const noCus = no_cus;
 
       const response = await axios.get(
         `${import.meta.env.VITE_API_URL}api/nav-by-no-cus`,
@@ -155,136 +187,71 @@ const AddContract = () => {
       setSearched(true);
       setExpand(false);
     } catch (error) {
-      showAlert("Gagal mengambil data dari server" + error, "error");
+      showAlert("Gagal mengambil data dari server", "error");
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchLastContract = async (no_cus) => {
+  const fecthDataMesin = async () => {
     try {
       const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}api/get-last-contract`,
+        `${import.meta.env.VITE_API_URL}api/get-contract-machine`,
         {
           params: {
-            no_cus: no_cus,
+            id_contract: id,
           },
+          timeout: 5000,
         }
       );
 
       const data = response.data;
 
       if (data.length <= 0) {
-        setLastCont(null);
         return;
-      }
-
-      if (data?.[0]?.tgl_contract && data.length > 1) {
-        setLastCont(data?.[0]?.tgl_contract);
       } else {
-        setLastCont(null);
+        setValue("no_seri", data);
       }
     } catch (error) {
-      console.error("Error fetching last contract:", error);
-      showAlert("Gagal mengambil service sebelumnya", "error");
-    }
-  };
-
-  const handleIdContract = async (type_service) => {
-    try {
-      let id = "";
-      const today = dayjs(); // Creates a dayjs object for the current date
-
-      const year = today.format("YY"); // Formats to two-digit year (e.g., "25")
-      const month = today.format("MM"); // Formats to two-digit month with leading zero (e.g., "07")
-
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}api/get-contract-type`,
-        {
-          params: {
-            type: type_service,
-          },
-        },
-        { timeout: 5000 }
-      );
-
-      const data = response.data[0];
-
-      if (data.type_name === "RT") {
-        id = `${data.last_count}/R/${month}/R/${year}`;
-      } else {
-        id = `${data.last_count}/PW-${data.type_name}/${year}`;
-      }
-
-      const update_counter = await axios.post(
-        `${import.meta.env.VITE_API_URL}api/update-contract-counter`,
-        {
-          type: data.type_name,
-          last_count: data.last_count + 1,
-        },
-        { timeout: 5000 }
-      );
-
-      const update = update_counter.data;
-
-      if (update.ok) {
-        return id;
-      }
-
-      return Error("Gagal menghasilkan id kontrak.");
-    } catch (error) {
-      showAlert("Gagal menghasilkan id kontrak.", "error");
+      console.error("Fetch data mesin : ", error);
     }
   };
 
   const onSubmit = async (values) => {
-    // setLoading(true);
+    setLoading(true);
 
     try {
       const data = new FormData();
 
       // Append all fields except special ones
-      for (const [key, value] of Object.entries(values)) {
-        // Use for...of
+      Object.entries(values).forEach(([key, value]) => {
         if (key === "no_seri") {
           data.append(key, JSON.stringify(value));
-        } else if (key === "type_service") {
-          try {
-            const no_contract = await handleIdContract(value); // Await here!
-            if (no_contract instanceof Error) {
-              // Handle the case where handleIdContract returned an Error object
-              console.error(no_contract.message);
-              // You might want to stop processing or append a default/error value
-              data.append("id", "ERROR_GENERATING_ID");
-            } else {
-              data.append(key, value);
-              data.append("id", no_contract); // Now 'no_contract' is the string
-            }
-          } catch (error) {
-            // handleIdContract also has its own showAlert, but catch here for robust error handling
-            console.error("Error generating contract ID:", error);
-            data.append("id", "ERROR_GENERATING_ID"); // Append an error placeholder
-            // Potentially re-throw or return to stop further processing
-          }
         } else {
           data.append(key, value);
         }
-      }
+      });
 
       // Submit main form
       const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}api/create-contract`,
+        `${import.meta.env.VITE_API_URL}api/edit-contract`,
         data,
-        { timeout: 5000 }
+        {
+          params: {
+            id: id,
+          },
+          timeout: 5000,
+        }
       );
 
       if (!response.data.ok) {
-        throw new Error("Gagal menyimpan data kontrak.");
+        throw new Error("Gagal mengubah data kontrak.");
       } else {
+        setLoading(false);
         setRetry(false);
         navigate("/contract", {
           state: {
-            message: "Data Kontrak Berhasil Ditambahkan!",
+            message: "Data Kontrak Berhasil Diubah!",
             severity: "success",
           },
         });
@@ -316,7 +283,7 @@ const AddContract = () => {
   return (
     <Paper sx={{ padding: 3, marginBottom: 5 }} elevation={4}>
       <Typography variant="h5" marginBottom={"1.5em"} gutterBottom>
-        New Kontrak
+        Edit Kontrak
       </Typography>
       <LocalizationProvider dateAdapter={AdapterDateFns}>
         <form
@@ -334,23 +301,10 @@ const AddContract = () => {
                 variant="outlined"
                 fullWidth
                 {...register("no_cus")}
+                disabled
                 error={!!errors.no_cus}
                 helperText={errors.no_cus?.message}
               />
-            </Grid>
-            {/* Button Search */}
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Button
-                type="button"
-                name="search"
-                id="search"
-                variant="contained"
-                color="primary"
-                onClick={handleSearch}
-                disabled={loading}
-              >
-                {loading ? <CircularProgress size={24} /> : "Search"}
-              </Button>
             </Grid>
             <Grid container spacing={5}>
               {/* Accordion 1 - Non Input */}
@@ -391,14 +345,14 @@ const AddContract = () => {
                       </Grid>
                       {/* Row 2 */}
                       {/* <Grid size={{ xs: 12, md: 6 }}>
-                        <Grid>
-                          <Typography>Kode Area :</Typography>
-                          <Typography>Group :</Typography>
-                        </Grid>
-                        <Typography>Supervisor :</Typography>
-                        <Typography>Teknisi :</Typography>
-                        <Typography>C.S.O :</Typography>
-                      </Grid> */}
+                          <Grid>
+                            <Typography>Kode Area :</Typography>
+                            <Typography>Group :</Typography>
+                          </Grid>
+                          <Typography>Supervisor :</Typography>
+                          <Typography>Teknisi :</Typography>
+                          <Typography>C.S.O :</Typography>
+                        </Grid> */}
                     </Grid>
                   </AccordionDetails>
                 </Accordion>
@@ -429,12 +383,7 @@ const AddContract = () => {
                           name="type_service"
                           control={control}
                           render={({ field }) => (
-                            <Select
-                              {...field}
-                              variant="outlined"
-                              fullWidth
-                              displayEmpty
-                            >
+                            <Select {...field} variant="outlined" fullWidth>
                               <MenuItem disabled value="">
                                 <em>Pilih Tipe Service</em>
                               </MenuItem>
@@ -461,8 +410,8 @@ const AddContract = () => {
                             <DatePicker
                               {...field}
                               format="dd-MM-yyyy"
-                              // minDate={new Date(minDateTime)}
-                              // maxDate={new Date(maxDateTime)}
+                              minDate={new Date(minDateTime)}
+                              maxDate={new Date(maxDateTime)}
                               onChange={(newValue) => {
                                 if (!(newValue <= lastCont)) {
                                   setValue("tgl_contract", newValue);
@@ -503,7 +452,7 @@ const AddContract = () => {
                               minDate={
                                 new Date(watch("tgl_contract") || minDateTime)
                               }
-                              // maxDate={new Date(maxDateTime)}
+                              maxDate={new Date(maxDateTime)}
                               onChange={(newValue) => {
                                 const awal = watch("tgl_contract");
                                 if (
@@ -657,4 +606,4 @@ const AddContract = () => {
   );
 };
 
-export default AddContract;
+export default EditContract;

@@ -7,11 +7,12 @@ import {
   Snackbar,
   Alert,
   Box,
+  CircularProgress,
 } from "@mui/material";
 import dayjs from "dayjs";
 import { DataGrid } from "@mui/x-data-grid";
-import axios from "axios";
 import { useAlert } from "../utils/alert";
+import axios from "axios";
 
 const FLKNoRep = () => {
   const location = useLocation();
@@ -22,6 +23,7 @@ const FLKNoRep = () => {
       field: "no",
       headerName: "No.",
       sortable: false,
+      flex: 0,
       renderCell: (params) => {
         return params.api.getAllRowIds().indexOf(params.id) + 1;
       },
@@ -30,30 +32,33 @@ const FLKNoRep = () => {
       field: "no_rep",
       headerName: "No Report",
       flex: 1,
-      width: 100,
+      minWidth: 150,
       renderCell: (params) => `SPGFGI${params.value}`,
     },
-    { field: "pelapor", headerName: "Nama Pelapor", flex: 1 },
+    { field: "pelapor", headerName: "Nama Pelapor", flex: 1, minWidth: 150 },
     {
       field: "waktu_mulai",
       headerName: "Waktu Mulai",
       flex: 1,
+      minWidth: 150,
       renderCell: (params) =>
-        params.value ? dayjs(params.value).format("YYYY-MM-DD HH:mm") : "-",
+        params.value ? dayjs(params.value).format("DD-MM-YYYY HH:mm") : "-",
     },
     {
       field: "waktu_selesai",
       headerName: "Waktu Selesai",
       flex: 1,
+      minWidth: 150,
       renderCell: (params) =>
-        params.value ? dayjs(params.value).format("YYYY-MM-DD HH:mm") : "-",
+        params.value ? dayjs(params.value).format("DD-MM-YYYY HH:mm") : "-",
     },
     {
       field: "actions",
       headerName: "Actions",
       sortable: false,
       filterable: false,
-      flex: 1,
+      flex: 0, // Disables flex shrinking
+      minWidth: 200, // Fallback width
       align: "center",
       renderCell: (params) => (
         <>
@@ -83,18 +88,19 @@ const FLKNoRep = () => {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    async function fetchDataFLK() {
+    const fetchDataFLK = async () => {
       try {
-        const response = await fetch(
+        const response = await axios.get(
           import.meta.env.VITE_API_URL + `api/get-flk-norep`
         );
 
-        const data = await response.json();
+        const data = response.data;
         setDatas(data); // <-- set the array into state
       } catch (error) {
         console.error("Error fetching items:", error);
+        showAlert("Terjadi kesalahan saat mengambil data!", "error");
       }
-    }
+    };
 
     if (location.state?.message) {
       showAlert(location.state.message, location.state.severity || "info");
@@ -117,7 +123,7 @@ const FLKNoRep = () => {
           },
           body: JSON.stringify({
             data: data,
-            reportTitle: `Report Laporan Kerja`,
+            reportTitle: `Report Laporan Kerja - Dengan Barang`,
           }),
         }
       );
@@ -128,7 +134,9 @@ const FLKNoRep = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `Report ${dayjs().format("DD-MM-YYYY")}.xlsx`;
+      link.download = `Report Satuan - Dengan Barang ${dayjs().format(
+        "DD-MM-YYYY"
+      )}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -146,23 +154,21 @@ const FLKNoRep = () => {
         Laporan Kerja - Dengan Barang
       </Typography>
       <Box sx={{ width: "100%", overflowX: "auto" }}>
-        <Box sx={{ minWidth: 700 }}>
-          <DataGrid
-            rows={datas}
-            columns={columns}
-            getRowId={(row) => row.id}
-            initialState={{
-              pagination: {
-                paginationModel: {
-                  pageSize: 5,
-                },
+        <DataGrid
+          rows={datas}
+          columns={columns}
+          columnBufferPx={columns.length} // Render all columns off-screen
+          getRowId={(row) => row.id}
+          initialState={{
+            pagination: {
+              paginationModel: {
+                pageSize: 5,
               },
-            }}
-            pageSizeOptions={[5]}
-            checkboxSelection
-            disableRowSelectionOnClick
-          />
-        </Box>
+            },
+          }}
+          pageSizeOptions={[5]}
+          disableRowSelectionOnClick
+        />
       </Box>
 
       {/* Link to Form Page */}

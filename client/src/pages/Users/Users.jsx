@@ -27,7 +27,7 @@ const Users = () => {
       },
     },
     { field: "name", headerName: "Nama", flex: 1 },
-    { field: "username", headerName: "Username", flex: 1 },
+    { field: "email", headerName: "Email", flex: 1 },
     {
       field: "actions",
       headerName: "Actions",
@@ -45,14 +45,14 @@ const Users = () => {
           >
             Edit
           </Button>
-          <Button
+          {/* <Button
             variant="contained"
             color="error"
             sx={{ marginLeft: 0.5 }}
             onClick={() => resetPass(params.row.id)}
           >
             Reset Password
-          </Button>
+          </Button> */}
         </>
       ),
     },

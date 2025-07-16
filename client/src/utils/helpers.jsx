@@ -89,32 +89,10 @@ export const schemaNoRep = yup.object().shape({
 
 export const schemaUsers = yup.object().shape({
   name: yup.string().required(),
-  username: yup.string().required(),
-  pass: yup.string().required(),
-  pic: yup.mixed().when("$isEdit", {
-    is: false, // when not editing, i.e., adding
-    then: (schema) =>
-      schema
-        .test(
-          "fileType",
-          "Hanya file gambar (jpg, png, jpeg) yang diperbolehkan.",
-          (value) => {
-            return (
-              value &&
-              ["image/jpeg", "image/png", "image/jpg"].includes(value.type)
-            );
-          }
-        )
-        .test(
-          "fileSize",
-          `Ukuran file maksimal ${import.meta.env.VITE_MAX_FILE_MB}MB.`,
-          (value) => {
-            const max_byte = import.meta.env.VITE_MAX_FILE_MB * 1024 * 1024;
-            return value && value.size <= max_byte;
-          }
-        ),
-    otherwise: (schema) => schema.nullable().notRequired(),
-  }),
+  email: yup.string().required(),
+  kode_area: yup.string(),
+  role: yup.number().required(),
+  type: yup.number().required(),
 });
 
 export const displayValue = (data) => {
@@ -143,7 +121,7 @@ export const displayFormatDate = (data) => {
 
   // If time is 00:00, treat it as date-only
   const hasTime =
-    date.hour() !== 0 || date.minute() !== 0 || date.second() !== 0;
+    date.hour() !== 7 || date.minute() !== 0 || date.second() !== 0;
 
   return hasTime ? date.format("DD-MM-YYYY HH:mm") : date.format("DD-MM-YYYY");
 };
