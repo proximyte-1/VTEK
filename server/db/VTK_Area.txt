@@ -1,0 +1,30 @@
+USE [PJPNavisionExtension]
+GO
+
+/****** Object:  Table [dbo].[VTK_Area]    Script Date: 18/07/2025 15.53.51 ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[VTK_Area](
+	[id] [bigint] IDENTITY(1,1) NOT NULL,
+	[nama_area] [varchar](100) NULL,
+	[kode_area] [varchar](20) NOT NULL,
+	[groups] [varchar](5) NULL,
+	[id_supervisor] [bigint] NOT NULL,
+	[updated_at] [datetime] NOT NULL,
+	[created_at] [datetime] NOT NULL,
+ CONSTRAINT [PK_VTK_Area] PRIMARY KEY CLUSTERED 
+(
+	[id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[VTK_Area] ADD  CONSTRAINT [DF_VTK_Area_updated_at]  DEFAULT (sysdatetime()) FOR [updated_at]
+GO
+
+ALTER TABLE [dbo].[VTK_Area] ADD  CONSTRAINT [DF_VTK_Area_created_at]  DEFAULT (sysdatetime()) FOR [created_at]
+GO

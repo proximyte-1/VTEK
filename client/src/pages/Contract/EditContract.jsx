@@ -207,6 +207,11 @@ const EditContract = () => {
 
       const data = response.data;
 
+      const transform = data.map((item) => ({
+        ...item,
+        tgl_instalasi: dayjs(item.tgl_instalasi).format("DD-MM-YYYY"),
+      }));
+
       if (data.length <= 0) {
         return;
       } else {
@@ -219,6 +224,7 @@ const EditContract = () => {
 
   const onSubmit = async (values) => {
     setLoading(true);
+    // return;
 
     try {
       const data = new FormData();

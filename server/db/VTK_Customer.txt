@@ -1,0 +1,31 @@
+USE [PJPNavisionExtension]
+GO
+
+/****** Object:  Table [dbo].[VTK_Customer]    Script Date: 18/07/2025 15.57.14 ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[VTK_Customer](
+	[id] [bigint] NOT NULL,
+	[no_cus] [varchar](15) NOT NULL,
+	[nama_cus] [varchar](100) NOT NULL,
+	[no_seri] [varchar](15) NOT NULL,
+	[alias] [varchar](150) NOT NULL,
+	[updated_at] [datetime] NOT NULL,
+	[created_by] [bigint] NOT NULL,
+	[created_at] [datetime] NOT NULL,
+ CONSTRAINT [PK_VTK_Customer] PRIMARY KEY CLUSTERED 
+(
+	[id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[VTK_Customer] ADD  CONSTRAINT [DF_VTK_Customer_updated_at]  DEFAULT (sysdatetime()) FOR [updated_at]
+GO
+
+ALTER TABLE [dbo].[VTK_Customer] ADD  CONSTRAINT [DF_VTK_Customer_created_at]  DEFAULT (sysdatetime()) FOR [created_at]
+GO

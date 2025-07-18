@@ -212,7 +212,7 @@ const PindahInstalasi = () => {
   return (
     <Paper sx={{ padding: 3 }} elevation={4}>
       <Typography variant="h5" marginBottom={"1.5em"} gutterBottom>
-        New Instalasi
+        Pindah Instalasi
       </Typography>
       <LocalizationProvider dateAdapter={AdapterDateFns}>
         <form

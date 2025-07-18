@@ -1,0 +1,26 @@
+USE [PJPNavisionExtension]
+GO
+
+/****** Object:  Table [dbo].[VTK_Barang]    Script Date: 18/07/2025 15.54.36 ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[VTK_Barang](
+	[id_brg] [bigint] IDENTITY(1,1) NOT NULL,
+	[no_lk] [varchar](50) NOT NULL,
+	[no_brg] [varchar](50) NOT NULL,
+	[nama_brg] [varchar](255) NULL,
+	[qty] [int] NULL,
+	[created_at] [datetime] NOT NULL,
+ CONSTRAINT [PK_VTK_Barang] PRIMARY KEY CLUSTERED 
+(
+	[id_brg] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[VTK_Barang] ADD  CONSTRAINT [DF_VTK_Barang_created_at]  DEFAULT (sysdatetime()) FOR [created_at]
+GO

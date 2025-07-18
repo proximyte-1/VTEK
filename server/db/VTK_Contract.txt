@@ -1,0 +1,32 @@
+USE [PJPNavisionExtension]
+GO
+
+/****** Object:  Table [dbo].[VTK_Contract]    Script Date: 18/07/2025 15.54.58 ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[VTK_Contract](
+	[id] [int] IDENTITY(1,1) NOT NULL,
+	[no_contract] [varchar](30) NULL,
+	[no_cus] [varchar](50) NOT NULL,
+	[type_service] [varchar](50) NULL,
+	[tgl_contract] [date] NULL,
+	[tgl_contract_exp] [date] NULL,
+	[created_by] [bigint] NOT NULL,
+	[created_at] [datetime] NOT NULL,
+PRIMARY KEY CLUSTERED 
+(
+	[id] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY],
+ CONSTRAINT [UQ_VTK_Contract_no_contract] UNIQUE NONCLUSTERED 
+(
+	[no_contract] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[VTK_Contract] ADD  CONSTRAINT [DF_VTK_Contract_created_at]  DEFAULT (sysdatetime()) FOR [created_at]
+GO

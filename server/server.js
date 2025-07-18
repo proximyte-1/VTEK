@@ -1639,7 +1639,7 @@ app.post("/api/edit-contract", upload.none(), async (req, res) => {
     // 2. Process machines
     // Get current machines
     const currentResult = await request.query(
-      `SELECT id, no_seri, lokasi 
+      `SELECT id, no_seri, lokasi, tgl_instalasi
        FROM dbo.${process.env.TABLE_CONTRACT_MACHINE} 
        WHERE id_contract = '${id}'`
     );
@@ -1651,30 +1651,27 @@ app.post("/api/edit-contract", upload.none(), async (req, res) => {
         (m) => m.no_seri === machine.no_seri
       );
 
+      const formatedTglInst = formatDatesForSQL(machine.tgl_instalasi);
+
       if (existing) {
         // Update if changed - USING PARAMETERIZED QUERY
         if (
           existing.lokasi !== machine.lokasi ||
-          existing.no_seri !== machine.no_seri
+          existing.no_seri !== machine.no_seri ||
+          existing.tgl_instalasi !== machine.tgl_instalasi
         ) {
-          await request
-            .input("update_no_seri", sql.VarChar, machine.no_seri)
-            .input("update_lokasi", sql.Text, machine.lokasi)
-            .input("update_id", sql.BigInt, existing.id).query(`
+          await request.query(`
               UPDATE dbo.${process.env.TABLE_CONTRACT_MACHINE} 
-              SET no_seri = @update_no_seri, lokasi = @update_lokasi 
-              WHERE id = @update_id
+              SET no_seri = '${machine.no_seri}', lokasi = '${machine.lokasi}', tgl_instalasi = '${formatedTglInst}'
+              WHERE id = '${existing.id}'
             `);
         }
       } else {
         // Add new machine - USING PARAMETERIZED QUERY
-        await request
-          .input("inst_no_seri", sql.VarChar, machine.no_seri)
-          .input("inst_lokasi", sql.Text, machine.lokasi)
-          .input("inst_id_contract", sql.VarChar, id).query(`
+        await request.query(`
             INSERT INTO dbo.${process.env.TABLE_CONTRACT_MACHINE} 
-            (no_seri, lokasi, id_contract, created_by) 
-            VALUES (@inst_no_seri, @inst_lokasi, @inst_id_contract, 1)
+            (no_seri, lokasi, id_contract, created_by, tgl_instalasi) 
+            VALUES ('${machine.no_seri}', '${machine.lokasi}', '${id}', 1, '${formatedTglInst}')
           `);
       }
     }
@@ -1687,10 +1684,12 @@ app.post("/api/edit-contract", upload.none(), async (req, res) => {
         )
     );
 
+    console.log(machinesToDelete);
+
     for (const machine of machinesToDelete) {
-      await request.input("del_id", sql.BigInt, machine.id).query(`
+      await request.query(`
           DELETE FROM dbo.${process.env.TABLE_CONTRACT_MACHINE} 
-          WHERE id = @del_id
+          WHERE id = '${id}'
         `);
     }
 
