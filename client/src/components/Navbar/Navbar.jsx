@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import AppBar from "@mui/material/AppBar";
 import Box from "@mui/material/Box";
 import Toolbar from "@mui/material/Toolbar";
@@ -39,34 +39,44 @@ const menu_master = [
   { name: "Kontrak", endpoint: "/contract" },
   { name: "Instalasi", endpoint: "/instalasi" },
   { name: "Area", endpoint: "/area" },
+  { name: "Customer", endpoint: "/customer" },
   { name: "Global Settings", endpoint: "/settings" },
 ];
 
-// const menu_report = [
-//   { name: "Per Periode", endpoint: "/users" },
-//   { name: "Per ", endpoint: "/contract" },
-//   { name: "Instalasi", endpoint: "/instalasi" },
-//   { name: "Area", endpoint: "/area" },
-//   { name: "Global Settings", endpoint: "/settings" },
-// ];
+const menu_report = [
+  { name: "Per Periode", endpoint: "/report-periode" },
+  { name: "Per Teknisi", endpoint: "/report-teknisi" },
+  { name: "Per Area", endpoint: "/report-area" },
+  { name: "Per Customer", endpoint: "/report-customer" },
+];
 
 function Navbar() {
   const [anchorElNav, setAnchorElNav] = useState(null);
   const [anchorElUser, setAnchorElUser] = useState(null);
   const [anchorElFLK, setAnchorElFLK] = useState(null);
   const [anchorElMaster, setAnchorElMaster] = useState(null);
+  const [anchorElReport, setAnchorElReport] = useState(null);
   const [openSubMenu, setOpenSubMenu] = useState(false);
 
   // Destructure authentication state and functions from the context
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
+  // useEffect(() => {
+  //   console.log("User object in component:", user);
+  //   if (user && user._json) {
+  //     console.log("User _json exists:", user._json);
+  //     console.log("User name:", user._json.name);
+  //     console.log("User picture URL:", user._json.picture);
+  //   } else {
+  //     console.log("User or user._json is undefined/null.");
+  //   }
+  // }, [user]);
+
   const handleOpenNavMenu = (event) => {
     setAnchorElNav(event.currentTarget);
   };
   const handleLogout = async () => {
-    console.log(user);
-    // return;
     logout();
   };
   const handleOpenUserMenu = (event) => {
@@ -77,6 +87,9 @@ function Navbar() {
   };
   const handleOpenMasterMenu = (event) => {
     setAnchorElMaster(event.currentTarget);
+  };
+  const handleOpenReportMenu = (event) => {
+    setAnchorElReport(event.currentTarget);
   };
   const handleCloseNavMenu = () => {
     setAnchorElNav(null);
@@ -93,6 +106,9 @@ function Navbar() {
   };
   const handleCloseMasterMenu = () => {
     setAnchorElMaster(null);
+  };
+  const handleCloseReportMenu = () => {
+    setAnchorElReport(null);
   };
 
   return (
@@ -195,6 +211,8 @@ function Navbar() {
                     handleOpenFLKMenu(e);
                   } else if (data.endpoint === "master") {
                     handleOpenMasterMenu(e);
+                  } else if (data.endpoint === "report") {
+                    handleOpenReportMenu(e);
                   } else if (data.endpoint === "login") {
                     console.log(user);
                   } else {
@@ -262,13 +280,41 @@ function Navbar() {
                 </MenuItem>
               ))}
             </Menu>
+
+            <Menu
+              sx={{ mt: "45px" }}
+              id="menu-appbar"
+              anchorEl={anchorElReport}
+              anchorOrigin={{
+                vertical: "top",
+                horizontal: "right",
+              }}
+              keepMounted
+              transformOrigin={{
+                vertical: "top",
+                horizontal: "right",
+              }}
+              open={Boolean(anchorElReport)}
+              onClose={handleCloseReportMenu}
+            >
+              {menu_report.map((data) => (
+                <MenuItem key={data.endpoint} onClick={handleCloseReportMenu}>
+                  <Typography
+                    sx={{ textAlign: "center", padding: "2px" }}
+                    onClick={() => navigate(data.endpoint)}
+                  >
+                    {data.name}
+                  </Typography>
+                </MenuItem>
+              ))}
+            </Menu>
           </Box>
 
           <Box sx={{ flexGrow: 0 }}>
             <Tooltip title="Open settings">
               <IconButton onClick={handleOpenUserMenu} sx={{ p: 0 }}>
                 <Avatar
-                  alt="Remy Sharp"
+                  alt={user?._json?.name}
                   referrerPolicy="no-referrer"
                   src={user?._json?.picture || "/static/images/avatar/2.jpg"}
                 />

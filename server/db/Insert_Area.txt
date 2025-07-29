@@ -1,0 +1,23 @@
+USE [PJPNavisionExtension]
+GO
+
+-- Enable identity insert
+SET IDENTITY_INSERT [dbo].[VTK_Area] ON;
+
+INSERT INTO [dbo].[VTK_Area]
+           ([id], [nama_area], [kode_area], [groups], [id_supervisor], [id_teknisi])
+VALUES
+(1, 'Kode Area 01', 'C1',  'A', 26, 1),
+(2, 'Kode Area 02', 'C2',  'A', 26, 1),
+(3, 'Kode Area 03', 'C3',  'A', 26, 1),
+(4, 'Kode Area 04', 'C4',  'A', 26, 2),
+(5, 'Kode Area 05', 'C5',  'A', 26, 2),
+(6, 'Kode Area 06', 'C6',  'B', 27, 3),
+(7, 'Kode Area 07', 'C7',  'B', 27, 3),
+(8, 'Kode Area 08', 'C8',  'B', 27, 3),
+(9, 'Kode Area 09', 'C9',  'B', 27, 4),
+(10, 'Kode Area 10', 'C10', 'B', 27, 5);
+
+-- Disable identity insert
+SET IDENTITY_INSERT [dbo].[VTK_Area] OFF;
+GO

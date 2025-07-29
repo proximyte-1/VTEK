@@ -46,8 +46,8 @@ export const selectRole = {
 };
 
 export const selectType = {
-  0: "Admin",
-  1: "Bukan Admin",
+  1: "Admin",
+  2: "Bukan Admin",
 };
 
 // Set limits from env variables

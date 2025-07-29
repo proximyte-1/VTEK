@@ -267,6 +267,19 @@ app.get("/api/user", (req, res) => {
   }
 });
 
+app.get("/api/get-users-by-email", async (req, res) => {
+  const { email = "" } = req.query;
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_USER} WHERE email = '${email}'`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
 // === GET Routes ===
 app.get("/api/get-flk", async (req, res) => {
   try {
@@ -382,13 +395,26 @@ app.get("/api/get-contract-lk", async (req, res) => {
 });
 
 app.get("/api/get-instalasi-lk", async (req, res) => {
-  const { no_seri } = req.query;
-  console.log(
-    `SELECT * FROM dbo.${process.env.TABLE_INSTALASI} WHERE no_seri = '${no_seri}' ORDER BY tgl_instalasi DESC`
-  );
+  const { id_contract } = req.query;
+
   try {
     const result = await pool.query(
-      `SELECT * FROM dbo.${process.env.TABLE_INSTALASI} WHERE no_seri = '${no_seri}' ORDER BY tgl_instalasi DESC`
+      `SELECT * FROM dbo.${process.env.TABLE_CONTRACT_MACHINE} WHERE id_contract = '${id_contract}' ORDER BY tgl_instalasi DESC`
+    );
+
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/get-area-lk", async (req, res) => {
+  const { no_cus } = req.query;
+  try {
+    const result = await pool.query(
+      `SELECT area.kode_area , area.groups, teknisi.name as nama_teknisi, spv.name as nama_spv from dbo.${process.env.TABLE_CUSTOMER} as cus join dbo.${process.env.TABLE_AREA} as area 
+on cus.kode_area = area.kode_area join dbo.${process.env.TABLE_USER} as teknisi on teknisi.id = area.id_teknisi
+join dbo.${process.env.TABLE_USER} as spv on spv.id = area.id_supervisor where cus.no_cus = '${no_cus}'`
     );
 
     res.json(result.recordset);
@@ -415,8 +441,6 @@ app.get("/api/nav-by-nama-cus", (req, res) => {
   const navURL =
     process.env.NAV_WS_URL +
     navSubStringEncode("Sell_to_Customer_Name", nama_cus);
-
-  console.log(navURL);
 
   fetchNavData(navURL, (err, data) => {
     if (err)
@@ -455,6 +479,7 @@ app.get("/api/nav", (req, res) => {
 app.post("/api/create-flk", upload.single("pic"), async (req, res) => {
   const fields = req.body;
   const file = req.file;
+
   if (!file)
     return res.status(400).json({ ok: false, message: "File is required" });
 
@@ -479,8 +504,8 @@ app.post("/api/create-flk", upload.single("pic"), async (req, res) => {
     saran,
     status_res,
     created_by,
-    deleted_at,
     no_lap,
+    no_fd,
   } = fields;
 
   const transaction = new sql.Transaction(pool);
@@ -499,23 +524,23 @@ app.post("/api/create-flk", upload.single("pic"), async (req, res) => {
     const selesai = formatDateForSQL(waktu_selesai);
 
     const query = `
-      INSERT INTO [dbo].[WebVTK] (
+      INSERT INTO dbo.${process.env.TABLE_LK} (
         no_rep, no_cus, no_call, pelapor, waktu_call, waktu_dtg, status_call,
         keluhan, kat_keluhan, problem, kat_problem, solusi, waktu_mulai,
         waktu_selesai, count_bw, count_cl, saran, status_res, rep_ke, no_seri,
-        type, created_by, deleted_at, pic, no_lap
+        type, created_by, pic, no_lap, no_fd
       ) OUTPUT INSERTED.id VALUES (
-        ${no_rep}, ${no_cus}, ${no_call}, ${pelapor}, ${call}, ${dtg},
-        ${status_call}, ${keluhan}, ${kat_keluhan}, ${problem}, ${kat_problem},
-        ${solusi}, ${mulai}, ${selesai}, ${count_bw}, ${count_cl},
-        ${saran}, ${status_res}, ${rep_ke}, ${no_seri}, ${type},
-        ${created_by}, ${deleted_at}, ${filePath}, ${no_lap}
+        '${no_rep}', '${no_cus}', '${no_call}', '${pelapor}', '${call}', '${dtg}',
+        '${status_call}', '${keluhan}', '${kat_keluhan}', '${problem}', '${kat_problem}',
+        '${solusi}', '${mulai}', '${selesai}', '${count_bw}', '${count_cl}',
+        '${saran}', '${status_res}', ${rep_ke}, '${no_seri}', '${type}',
+        '${created_by}', '${filePath}', '${no_lap}', '${no_fd}'
       )
     `;
 
     const execute = await request.query(query);
 
-    const id = result.recordset[0].id;
+    const id = execute.recordset[0].id;
     await transaction.commit();
     res.json({ ok: true, message: "Data inserted.", data: { id } });
   } catch (err) {
@@ -567,6 +592,8 @@ app.post("/api/create-brg", async (req, res) => {
 
       const execute = await request.query(query);
     }
+
+    await transaction.commit();
 
     res.json({ ok: true, message: "Barang inserted" });
   } catch (err) {
@@ -754,6 +781,156 @@ app.post("/api/export-data", async (req, res) => {
   return;
 });
 
+app.post("/api/export-data-customer", async (req, res) => {
+  try {
+    const { dari, sampai, jenis, no_cus } = req.body;
+
+    const conditions = [];
+    const request = pool.request();
+
+    if (jenis === "no_rep") {
+      conditions.push("type = @type");
+      request.input("type", 1);
+    } else if (jenis === "no_seri") {
+      conditions.push("type = @type");
+      request.input("type", 2);
+    }
+
+    if (dari && sampai) {
+      conditions.push(
+        "FORMAT(waktu_selesai, 'yyyy-MM-dd') BETWEEN @dari AND @sampai"
+      );
+      request.input("dari", dayjs(dari).format("YYYY-MM-DD"));
+      request.input("sampai", dayjs(sampai).format("YYYY-MM-DD"));
+    }
+
+    if (no_cus) {
+      conditions.push("no_cus = @no_cus");
+      request.input("no_cus", no_cus);
+    }
+
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const query = `SELECT * FROM dbo.${process.env.TABLE_LK} ${whereClause} ORDER BY waktu_selesai, no_seri ASC`;
+
+    // execute
+    const result = await request.query(query);
+
+    res.json({
+      ok: true,
+      message: "Data get filter success",
+      data: result.recordset,
+    });
+  } catch (err) {
+    console.error("Get data filter error:", err);
+    res.status(500).send("Failed to get data filter");
+  }
+
+  return;
+});
+
+app.post("/api/export-data-area", async (req, res) => {
+  try {
+    const { dari, sampai, jenis, groups, kode_area } = req.body;
+
+    const conditions = [];
+    const request = pool.request();
+
+    if (jenis === "no_rep") {
+      conditions.push("type = @type");
+      request.input("type", 1);
+    } else if (jenis === "no_seri") {
+      conditions.push("type = @type");
+      request.input("type", 2);
+    }
+
+    if (dari && sampai) {
+      conditions.push(
+        "FORMAT(waktu_selesai, 'yyyy-MM-dd') BETWEEN @dari AND @sampai"
+      );
+      request.input("dari", dayjs(dari).format("YYYY-MM-DD"));
+      request.input("sampai", dayjs(sampai).format("YYYY-MM-DD"));
+    }
+
+    if (groups) {
+      conditions.push("area.groups = @groups");
+      request.input("groups", groups);
+    }
+
+    if (kode_area) {
+      conditions.push("area.kode_area = @kode_area");
+      request.input("kode_area", kode_area);
+    }
+
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const query = `SELECT lk.* FROM dbo.${process.env.TABLE_LK} AS lk JOIN dbo.${process.env.TABLE_CUSTOMER} AS cus ON lk.no_cus = cus.no_cus
+JOIN dbo.${process.env.TABLE_AREA} AS area ON cus.kode_area = area.kode_area ${whereClause} ORDER BY lk.waktu_selesai, lk.no_seri ASC`;
+
+    // execute
+    const result = await request.query(query);
+
+    res.json({
+      ok: true,
+      message: "Data get filter success",
+      data: result.recordset,
+    });
+  } catch (err) {
+    console.error("Get data filter error:", err);
+    res.status(500).send("Failed to get data filter");
+  }
+
+  return;
+});
+
+app.post("/api/export-data-teknisi", async (req, res) => {
+  try {
+    const { dari, sampai, jenis, teknisi } = req.body;
+
+    const conditions = [];
+    const request = pool.request();
+
+    if (jenis === "no_rep") {
+      conditions.push("type = @type");
+      request.input("type", 1);
+    } else if (jenis === "no_seri") {
+      conditions.push("type = @type");
+      request.input("type", 2);
+    }
+
+    if (dari && sampai) {
+      conditions.push(
+        "FORMAT(waktu_selesai, 'yyyy-MM-dd') BETWEEN @dari AND @sampai"
+      );
+      request.input("dari", dayjs(dari).format("YYYY-MM-DD"));
+      request.input("sampai", dayjs(sampai).format("YYYY-MM-DD"));
+    }
+
+    if (teknisi) {
+      conditions.push("teknisi.id = @teknisi");
+      request.input("teknisi", teknisi);
+    }
+
+    const whereClause =
+      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+    const query = `SELECT lk.* FROM dbo.${process.env.TABLE_LK} AS lk JOIN dbo.${process.env.TABLE_CUSTOMER} AS cus ON lk.no_cus = cus.no_cus JOIN dbo.${process.env.TABLE_AREA} AS area ON cus.kode_area = area.kode_area JOIN dbo.${process.env.TABLE_USER} AS teknisi ON area.id_teknisi = teknisi.id ${whereClause} ORDER BY lk.waktu_selesai, lk.no_seri ASC`;
+
+    // execute
+    const result = await request.query(query);
+
+    res.json({
+      ok: true,
+      message: "Data get filter success",
+      data: result.recordset,
+    });
+  } catch (err) {
+    console.error("Get data filter error:", err);
+    res.status(500).send("Failed to get data filter");
+  }
+
+  return;
+});
+
 app.post("/api/export-report", async (req, res) => {
   try {
     const { data: data, reportTitle, columns } = req.body;
@@ -844,6 +1021,665 @@ app.post("/api/export-report", async (req, res) => {
       ["Jabatan", dataInfoVal.jabatan || "-"],
       ["No. Telp", dataInfoVal.telp || "-"],
     ];
+
+    // Add a single row with this info (e.g., row 3)
+    const infoRow = worksheet.addRow([]);
+
+    // Split into chunks (3 items per row)
+    const chunkSize = 3;
+    for (let i = 0; i < infoArray.length; i += chunkSize) {
+      const chunk = infoArray.slice(i, i + chunkSize);
+      const row = worksheet.addRow([]);
+
+      let colIndex = 1;
+      chunk.forEach(([label, value]) => {
+        const labelCell = row.getCell(colIndex++);
+        // const equalsCell = row.getCell(colIndex++);
+        const valueCell = row.getCell(colIndex++);
+        const gapCell = row.getCell(colIndex++);
+
+        labelCell.value = label;
+        labelCell.font = { bold: true };
+
+        // equalsCell.value = "=";
+        // equalsCell.alignment = { horizontal: "center" };
+
+        valueCell.value = "= " + value;
+        valueCell.alignment = { wrapText: true, shrinkToFit: true };
+      });
+    }
+
+    worksheet.addRow([]);
+
+    // Assume your column setup
+    const mainHeaders = columns.map((col) => col.headerName);
+    const itemSubHeaders = ["Nama Barang", "No Barang", "Qty"];
+
+    // Header
+    const subHeaderRow = worksheet.addRow([...mainHeaders, ...itemSubHeaders]);
+    subHeaderRow.font = { bold: true };
+
+    // Style both rows
+    [subHeaderRow].forEach((row) => {
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          bottom: { style: "thin" },
+          left: { style: "thin" },
+          right: { style: "thin" },
+        };
+        cell.alignment = {
+          vertical: "middle",
+          horizontal: "center",
+          wrapText: true,
+        };
+      });
+    });
+
+    // Write transaction roworksheet with items
+    mergedData.forEach((trx, index) => {
+      const itemCount = trx.barang.length || 1;
+
+      for (let i = 0; i < itemCount; i++) {
+        const item = trx.barang[i] || {};
+
+        // If frontend did not set 'no', we can override it here
+        if (i === 0 && !trx.no) trx.no = index + 1;
+
+        const baseFields = columns.map((col) =>
+          i === 0 ? trx[col.field] : "-"
+        );
+        const row = worksheet.addRow([
+          ...baseFields,
+          item.nama_brg || "-",
+          item.no_brg || "-",
+          item.qty || "-",
+        ]);
+
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin" },
+            left: { style: "thin" },
+            bottom: { style: "thin" },
+            right: { style: "thin" },
+          };
+        });
+      }
+
+      // Merge transaction info columns
+      if (itemCount > 1) {
+        for (let i = 0; i < columns.length; i++) {
+          const colLetter = worksheet.getColumn(i + 1).letter;
+          worksheet.mergeCells(
+            `${colLetter}${
+              worksheet.lastRow.number - itemCount + 1
+            }:${colLetter}${worksheet.lastRow.number}`
+          );
+        }
+      }
+    });
+
+    // Auto-fit columns
+    worksheet.columns.forEach((col) => {
+      let maxLength = 5;
+
+      col.eachCell({ includeEmpty: true }, (cell) => {
+        const val = cell.value ? cell.value.toString() : "";
+        maxLength = Math.max(maxLength, val.length);
+
+        // Apply wrap text + alignment to all cells
+        cell.alignment = {
+          wrapText: true,
+          vertical: "middle",
+          horizontal: "left",
+        };
+      });
+
+      // Set column width with padding
+      col.width = Math.min(maxLength + 2, 50); // Limit to max width
+    });
+
+    // Send the Excel file to the client
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=${reportTitle || "report"}.xlsx`
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error("Excel export error:", err);
+    res.status(500).send("Failed to generate Excel report");
+  }
+});
+
+app.post("/api/export-report-customer", async (req, res) => {
+  try {
+    const { data: data, reportTitle, columns } = req.body;
+
+    const dataIds = data.map((item) => item.id);
+    if (!dataIds.length) return res.status(400).send("No data received");
+
+    const barangResult = await pool.request().query(`
+      SELECT *
+      FROM dbo.${process.env.TABLE_BRG}
+      WHERE no_lk IN (${dataIds.map((id) => `'${id}'`).join(",")})
+    `);
+
+    const mapBarang = {};
+    for (const item of barangResult.recordset) {
+      const { no_lk, nama_brg, no_brg, qty } = item;
+      if (!mapBarang[no_lk]) {
+        mapBarang[no_lk] = [];
+      }
+      mapBarang[no_lk].push({
+        nama_brg: nama_brg,
+        no_brg: no_brg,
+        qty: qty,
+      });
+    }
+
+    const sanitizeFields = (data) => {
+      const sanitized = {};
+      for (const key in data) {
+        sanitized[key] =
+          data[key] != null && data[key] !== "" ? data[key] : "-";
+      }
+      return sanitized;
+    };
+
+    // Map items to transaction
+    const mergedData = data.map((trx) => {
+      const safeTrx = sanitizeFields(trx);
+
+      return {
+        ...safeTrx,
+        waktu_mulai: dayjs(trx.waktu_mulai).format("DD MMMM YYYY HH:mm"),
+        waktu_selesai: dayjs(trx.waktu_selesai).format("DD/MM/YYYY HH:mm"),
+        waktu_call: dayjs(trx.waktu_call).format("DD/MM/YYYY HH:mm"),
+        waktu_dtg: dayjs(trx.waktu_dtg).format("DD/MM/YYYY HH:mm"),
+        created_at: dayjs(trx.created_at).format("DD/MM/YYYY HH:mm"),
+        type: trx.type === 1 ? "Dengan Barang" : "Tanpa Barang",
+        barang: mapBarang[trx.id] || [],
+      };
+    });
+
+    // ====== Start Excel Export ======
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Report");
+
+    const customerDataResult = await pool.request().query(`
+      SELECT cus.no_cus, cus.alias, cus.kode_area, cus.nama_cus, area.groups, teknisi.name AS teknisi, spv.name AS spv FROM dbo.${process.env.TABLE_CUSTOMER} AS cus JOIN dbo.${process.env.TABLE_AREA} AS area ON cus.kode_area = area.kode_area JOIN dbo.${process.env.TABLE_USER} AS teknisi ON area.id_teknisi = teknisi.id JOIN dbo.${process.env.TABLE_USER} AS spv ON area.id_supervisor = spv.id WHERE cus.no_cus = '${mergedData[0].no_cus}'
+    `);
+
+    console.log(customerDataResult);
+
+    let dataInfoVal;
+    if (customerDataResult.recordset) {
+      dataInfoVal = customerDataResult.recordset[0];
+    }
+
+    // Title row
+    worksheet.mergeCells("A1", "I1");
+    worksheet.getCell("A1").value = reportTitle || "Export Report";
+    worksheet.getCell("A1").font = { bold: true, size: 16 };
+    worksheet.getCell("A1").alignment = { horizontal: "center" };
+    worksheet.addRow([]);
+
+    const infoArray = [
+      ["Nama Customer", dataInfoVal.nama_cus || "-"],
+      ["No. Customer", dataInfoVal.no_cus || "-"],
+      ["Alias", dataInfoVal.alias || "-"],
+      ["Kode Area", dataInfoVal.kode_area || "-"],
+      ["Groups", dataInfoVal.groups || "-"],
+      ["Teknisi", dataInfoVal.teknisi || "-"],
+      ["Supervisor", dataInfoVal.spv || "-"],
+    ];
+
+    // Add a single row with this info (e.g., row 3)
+    const infoRow = worksheet.addRow([]);
+
+    // Split into chunks (3 items per row)
+    const chunkSize = 3;
+    for (let i = 0; i < infoArray.length; i += chunkSize) {
+      const chunk = infoArray.slice(i, i + chunkSize);
+      const row = worksheet.addRow([]);
+
+      let colIndex = 1;
+      chunk.forEach(([label, value]) => {
+        const labelCell = row.getCell(colIndex++);
+        // const equalsCell = row.getCell(colIndex++);
+        const valueCell = row.getCell(colIndex++);
+        const gapCell = row.getCell(colIndex++);
+
+        labelCell.value = label;
+        labelCell.font = { bold: true };
+
+        // equalsCell.value = "=";
+        // equalsCell.alignment = { horizontal: "center" };
+
+        valueCell.value = "= " + value;
+        valueCell.alignment = { wrapText: true, shrinkToFit: true };
+      });
+    }
+
+    worksheet.addRow([]);
+
+    // Assume your column setup
+    const mainHeaders = columns.map((col) => col.headerName);
+    const itemSubHeaders = ["Nama Barang", "No Barang", "Qty"];
+
+    // Header
+    const subHeaderRow = worksheet.addRow([...mainHeaders, ...itemSubHeaders]);
+    subHeaderRow.font = { bold: true };
+
+    // Style both rows
+    [subHeaderRow].forEach((row) => {
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          bottom: { style: "thin" },
+          left: { style: "thin" },
+          right: { style: "thin" },
+        };
+        cell.alignment = {
+          vertical: "middle",
+          horizontal: "center",
+          wrapText: true,
+        };
+      });
+    });
+
+    // Write transaction roworksheet with items
+    mergedData.forEach((trx, index) => {
+      const itemCount = trx.barang.length || 1;
+
+      for (let i = 0; i < itemCount; i++) {
+        const item = trx.barang[i] || {};
+
+        // If frontend did not set 'no', we can override it here
+        if (i === 0 && !trx.no) trx.no = index + 1;
+
+        const baseFields = columns.map((col) =>
+          i === 0 ? trx[col.field] : "-"
+        );
+        const row = worksheet.addRow([
+          ...baseFields,
+          item.nama_brg || "-",
+          item.no_brg || "-",
+          item.qty || "-",
+        ]);
+
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin" },
+            left: { style: "thin" },
+            bottom: { style: "thin" },
+            right: { style: "thin" },
+          };
+        });
+      }
+
+      // Merge transaction info columns
+      if (itemCount > 1) {
+        for (let i = 0; i < columns.length; i++) {
+          const colLetter = worksheet.getColumn(i + 1).letter;
+          worksheet.mergeCells(
+            `${colLetter}${
+              worksheet.lastRow.number - itemCount + 1
+            }:${colLetter}${worksheet.lastRow.number}`
+          );
+        }
+      }
+    });
+
+    // Auto-fit columns
+    worksheet.columns.forEach((col) => {
+      let maxLength = 5;
+
+      col.eachCell({ includeEmpty: true }, (cell) => {
+        const val = cell.value ? cell.value.toString() : "";
+        maxLength = Math.max(maxLength, val.length);
+
+        // Apply wrap text + alignment to all cells
+        cell.alignment = {
+          wrapText: true,
+          vertical: "middle",
+          horizontal: "left",
+        };
+      });
+
+      // Set column width with padding
+      col.width = Math.min(maxLength + 2, 50); // Limit to max width
+    });
+
+    // Send the Excel file to the client
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=${reportTitle || "report"}.xlsx`
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error("Excel export error:", err);
+    res.status(500).send("Failed to generate Excel report");
+  }
+});
+
+app.post("/api/export-report-area", async (req, res) => {
+  try {
+    const { data: data, reportTitle, columns, groups, kode_area } = req.body;
+
+    const dataIds = data.map((item) => item.id);
+    if (!dataIds.length) return res.status(400).send("No data received");
+
+    const barangResult = await pool.request().query(`
+      SELECT *
+      FROM dbo.${process.env.TABLE_BRG}
+      WHERE no_lk IN (${dataIds.map((id) => `'${id}'`).join(",")})
+    `);
+
+    const mapBarang = {};
+    for (const item of barangResult.recordset) {
+      const { no_lk, nama_brg, no_brg, qty } = item;
+      if (!mapBarang[no_lk]) {
+        mapBarang[no_lk] = [];
+      }
+      mapBarang[no_lk].push({
+        nama_brg: nama_brg,
+        no_brg: no_brg,
+        qty: qty,
+      });
+    }
+
+    const sanitizeFields = (data) => {
+      const sanitized = {};
+      for (const key in data) {
+        sanitized[key] =
+          data[key] != null && data[key] !== "" ? data[key] : "-";
+      }
+      return sanitized;
+    };
+
+    // Map items to transaction
+    const mergedData = data.map((trx) => {
+      const safeTrx = sanitizeFields(trx);
+
+      return {
+        ...safeTrx,
+        waktu_mulai: dayjs(trx.waktu_mulai).format("DD MMMM YYYY HH:mm"),
+        waktu_selesai: dayjs(trx.waktu_selesai).format("DD/MM/YYYY HH:mm"),
+        waktu_call: dayjs(trx.waktu_call).format("DD/MM/YYYY HH:mm"),
+        waktu_dtg: dayjs(trx.waktu_dtg).format("DD/MM/YYYY HH:mm"),
+        created_at: dayjs(trx.created_at).format("DD/MM/YYYY HH:mm"),
+        type: trx.type === 1 ? "Dengan Barang" : "Tanpa Barang",
+        barang: mapBarang[trx.id] || [],
+      };
+    });
+
+    // ====== Start Excel Export ======
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Report");
+
+    const condition = [];
+
+    if (groups) {
+      condition.push(`groups = '${groups}'`);
+    }
+
+    if (kode_area) {
+      condition.push(`kode_area = '${kode_area}'`);
+    }
+
+    const whereClause =
+      condition.length > 0 ? ` WHERE ${condition.join(" AND ")}` : "";
+
+    const areaDataQuery = `SELECT area.kode_area, area.nama_area, area.groups, teknisi.name AS teknisi, spv.name AS spv FROM dbo.${process.env.TABLE_AREA} AS area JOIN dbo.${process.env.TABLE_USER} AS teknisi on area.id_teknisi = teknisi.id
+JOIN dbo.${process.env.TABLE_USER} AS spv ON area.id_supervisor = spv.id ${whereClause}`;
+
+    console.log(areaDataQuery);
+
+    const areaDataResult = await pool.request().query(areaDataQuery);
+
+    let dataInfoVal;
+    if (areaDataResult.recordset) {
+      dataInfoVal = areaDataResult.recordset[0];
+    }
+
+    // Title row
+    worksheet.mergeCells("A1", "I1");
+    worksheet.getCell("A1").value = reportTitle || "Export Report";
+    worksheet.getCell("A1").font = { bold: true, size: 16 };
+    worksheet.getCell("A1").alignment = { horizontal: "center" };
+    worksheet.addRow([]);
+
+    const infoArray = [
+      ["Kode Area", dataInfoVal.kode_area || "-"],
+      ["Nama Area", dataInfoVal.nama_area || "-"],
+      ["Groups", dataInfoVal.groups || "-"],
+      ["Teknisi", dataInfoVal.teknisi || "-"],
+      ["Supervisor", dataInfoVal.spv || "-"],
+    ];
+
+    // Add a single row with this info (e.g., row 3)
+    const infoRow = worksheet.addRow([]);
+
+    // Split into chunks (3 items per row)
+    const chunkSize = 3;
+    for (let i = 0; i < infoArray.length; i += chunkSize) {
+      const chunk = infoArray.slice(i, i + chunkSize);
+      const row = worksheet.addRow([]);
+
+      let colIndex = 1;
+      chunk.forEach(([label, value]) => {
+        const labelCell = row.getCell(colIndex++);
+        // const equalsCell = row.getCell(colIndex++);
+        const valueCell = row.getCell(colIndex++);
+        const gapCell = row.getCell(colIndex++);
+
+        labelCell.value = label;
+        labelCell.font = { bold: true };
+
+        // equalsCell.value = "=";
+        // equalsCell.alignment = { horizontal: "center" };
+
+        valueCell.value = "= " + value;
+        valueCell.alignment = { wrapText: true, shrinkToFit: true };
+      });
+    }
+
+    worksheet.addRow([]);
+
+    // Assume your column setup
+    const mainHeaders = columns.map((col) => col.headerName);
+    const itemSubHeaders = ["Nama Barang", "No Barang", "Qty"];
+
+    // Header
+    const subHeaderRow = worksheet.addRow([...mainHeaders, ...itemSubHeaders]);
+    subHeaderRow.font = { bold: true };
+
+    // Style both rows
+    [subHeaderRow].forEach((row) => {
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin" },
+          bottom: { style: "thin" },
+          left: { style: "thin" },
+          right: { style: "thin" },
+        };
+        cell.alignment = {
+          vertical: "middle",
+          horizontal: "center",
+          wrapText: true,
+        };
+      });
+    });
+
+    // Write transaction roworksheet with items
+    mergedData.forEach((trx, index) => {
+      const itemCount = trx.barang.length || 1;
+
+      for (let i = 0; i < itemCount; i++) {
+        const item = trx.barang[i] || {};
+
+        // If frontend did not set 'no', we can override it here
+        if (i === 0 && !trx.no) trx.no = index + 1;
+
+        const baseFields = columns.map((col) =>
+          i === 0 ? trx[col.field] : "-"
+        );
+        const row = worksheet.addRow([
+          ...baseFields,
+          item.nama_brg || "-",
+          item.no_brg || "-",
+          item.qty || "-",
+        ]);
+
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: "thin" },
+            left: { style: "thin" },
+            bottom: { style: "thin" },
+            right: { style: "thin" },
+          };
+        });
+      }
+
+      // Merge transaction info columns
+      if (itemCount > 1) {
+        for (let i = 0; i < columns.length; i++) {
+          const colLetter = worksheet.getColumn(i + 1).letter;
+          worksheet.mergeCells(
+            `${colLetter}${
+              worksheet.lastRow.number - itemCount + 1
+            }:${colLetter}${worksheet.lastRow.number}`
+          );
+        }
+      }
+    });
+
+    // Auto-fit columns
+    worksheet.columns.forEach((col) => {
+      let maxLength = 5;
+
+      col.eachCell({ includeEmpty: true }, (cell) => {
+        const val = cell.value ? cell.value.toString() : "";
+        maxLength = Math.max(maxLength, val.length);
+
+        // Apply wrap text + alignment to all cells
+        cell.alignment = {
+          wrapText: true,
+          vertical: "middle",
+          horizontal: "left",
+        };
+      });
+
+      // Set column width with padding
+      col.width = Math.min(maxLength + 2, 50); // Limit to max width
+    });
+
+    // Send the Excel file to the client
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.setHeader(
+      "Content-Disposition",
+      `attachment; filename=${reportTitle || "report"}.xlsx`
+    );
+
+    await workbook.xlsx.write(res);
+    res.end();
+  } catch (err) {
+    console.error("Excel export error:", err);
+    res.status(500).send("Failed to generate Excel report");
+  }
+});
+
+app.post("/api/export-report-teknisi", async (req, res) => {
+  try {
+    const { data: data, reportTitle, columns, teknisi } = req.body;
+
+    const dataIds = data.map((item) => item.id);
+    if (!dataIds.length) return res.status(400).send("No data received");
+
+    const barangResult = await pool.request().query(`
+      SELECT *
+      FROM dbo.${process.env.TABLE_BRG}
+      WHERE no_lk IN (${dataIds.map((id) => `'${id}'`).join(",")})
+    `);
+
+    const mapBarang = {};
+    for (const item of barangResult.recordset) {
+      const { no_lk, nama_brg, no_brg, qty } = item;
+      if (!mapBarang[no_lk]) {
+        mapBarang[no_lk] = [];
+      }
+      mapBarang[no_lk].push({
+        nama_brg: nama_brg,
+        no_brg: no_brg,
+        qty: qty,
+      });
+    }
+
+    const sanitizeFields = (data) => {
+      const sanitized = {};
+      for (const key in data) {
+        sanitized[key] =
+          data[key] != null && data[key] !== "" ? data[key] : "-";
+      }
+      return sanitized;
+    };
+
+    // Map items to transaction
+    const mergedData = data.map((trx) => {
+      const safeTrx = sanitizeFields(trx);
+
+      return {
+        ...safeTrx,
+        waktu_mulai: dayjs(trx.waktu_mulai).format("DD MMMM YYYY HH:mm"),
+        waktu_selesai: dayjs(trx.waktu_selesai).format("DD/MM/YYYY HH:mm"),
+        waktu_call: dayjs(trx.waktu_call).format("DD/MM/YYYY HH:mm"),
+        waktu_dtg: dayjs(trx.waktu_dtg).format("DD/MM/YYYY HH:mm"),
+        created_at: dayjs(trx.created_at).format("DD/MM/YYYY HH:mm"),
+        type: trx.type === 1 ? "Dengan Barang" : "Tanpa Barang",
+        barang: mapBarang[trx.id] || [],
+      };
+    });
+
+    // ====== Start Excel Export ======
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Report");
+
+    const areaDataQuery = `SELECT teknisi.name AS teknisi FROM dbo.${process.env.TABLE_AREA} AS area JOIN dbo.${process.env.TABLE_USER} AS teknisi on area.id_teknisi = teknisi.id
+JOIN dbo.${process.env.TABLE_USER} AS spv ON area.id_supervisor = spv.id WHERE teknisi.id = '${teknisi}'`;
+
+    console.log(areaDataQuery);
+
+    const areaDataResult = await pool.request().query(areaDataQuery);
+
+    let dataInfoVal;
+    if (areaDataResult.recordset) {
+      dataInfoVal = areaDataResult.recordset[0];
+    }
+
+    // Title row
+    worksheet.mergeCells("A1", "I1");
+    worksheet.getCell("A1").value = reportTitle || "Export Report";
+    worksheet.getCell("A1").font = { bold: true, size: 16 };
+    worksheet.getCell("A1").alignment = { horizontal: "center" };
+    worksheet.addRow([]);
+
+    const infoArray = [["Teknisi", dataInfoVal.teknisi || "-"]];
 
     // Add a single row with this info (e.g., row 3)
     const infoRow = worksheet.addRow([]);
@@ -1285,12 +2121,6 @@ app.post("/api/export-lk-noseri", async (req, res) => {
 // ==== USER CRUD ====
 app.post("/api/create-users", upload.none(), async (req, res) => {
   const { name, email, type, role } = req.body;
-  // let filePath = null;
-
-  // const file = req.file;
-  // if (file) filePath = path.join(uploadPath, file.filename);
-
-  // const hashedPassword = await bcrypt.hash(pass, SALT);
 
   try {
     const query = `
@@ -1340,6 +2170,28 @@ app.get("/api/get-users", async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT * FROM dbo.${process.env.TABLE_USER}`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/get-teknisi", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_USER} WHERE role = 1`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/get-spv", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_USER}  WHERE role = 3`
     );
     res.json(result.recordset);
   } catch (err) {
@@ -1486,6 +2338,18 @@ FROM
 WHERE
     rn = 1;
 `
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/get-contract-machine-history-by-id", async (req, res) => {
+  const { id_contract } = req.query;
+  try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_CONTRACT_MACHINE} WHERE id_contract = '${id_contract}' ORDER BY no_seri, tgl_instalasi DESC`
     );
     res.json(result.recordset);
   } catch (err) {
@@ -1683,8 +2547,6 @@ app.post("/api/edit-contract", upload.none(), async (req, res) => {
           (incoming) => incoming.no_seri === dbMachine.no_seri
         )
     );
-
-    console.log(machinesToDelete);
 
     for (const machine of machinesToDelete) {
       await request.query(`
@@ -2069,8 +2931,19 @@ app.get("/api/get-area", async (req, res) => {
   }
 });
 
+app.get("/api/get-area-groups", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT groups FROM dbo.${process.env.TABLE_AREA} GROUP BY groups`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
 app.post("/api/create-area", upload.none(), async (req, res) => {
-  const { kode_area, nama_area, groups, id_supervisor } = req.body;
+  const { kode_area, nama_area, groups, id_supervisor, id_teknisi } = req.body;
   const now = dayjs();
 
   const transaction = new sql.Transaction(pool);
@@ -2081,10 +2954,10 @@ app.post("/api/create-area", upload.none(), async (req, res) => {
     const query = `
       INSERT INTO dbo.${
         process.env.TABLE_AREA
-      } (kode_area, nama_area, groups, id_supervisor, updated_at)
+      } (kode_area, nama_area, groups, id_supervisor, updated_at, id_teknisi)
       VALUES ('${kode_area}', '${nama_area}', '${groups}', '${id_supervisor}', '${formatDateForSQL(
       now
-    )}')
+    )}', '${id_teknisi}')
     `;
 
     await request.query(query);
@@ -2133,7 +3006,7 @@ app.get("/api/get-area-by-id", async (req, res) => {
 
 app.post("/api/edit-area", upload.none(), async (req, res) => {
   const { id = "" } = req.query;
-  const { kode_area, nama_area, groups, id_supervisor } = req.body;
+  const { kode_area, nama_area, groups, id_supervisor, id_teknisi } = req.body;
 
   const now = dayjs();
   const transaction = new sql.Transaction(pool);
@@ -2146,12 +3019,170 @@ app.post("/api/edit-area", upload.none(), async (req, res) => {
         process.env.TABLE_AREA
       } SET kode_area = '${kode_area}', nama_area = '${nama_area}', groups = '${groups}', id_supervisor = '${id_supervisor}', updated_at = '${formatDateForSQL(
       now
-    )}' WHERE id = '${id}'
+    )}', id_teknisi = '${id_teknisi}' WHERE id = '${id}'
     `;
 
     await request.query(query);
     await transaction.commit();
     res.json({ ok: true, message: "Area updated" });
+  } catch (err) {
+    console.error(err);
+    try {
+      await transaction.rollback();
+      console.log("Transaction rolled back.");
+    } catch (rollbackErr) {
+      console.error("Error rolling back transaction:", rollbackErr);
+    }
+
+    if (err.name === "RequestError" && err.message.includes("Timeout")) {
+      console.log("Detected a database request timeout.");
+      // Use 408 Request Timeout for client-side handling
+      res.status(408).json({
+        ok: false,
+        message: "Database operation timed out. Please try again.",
+      });
+    } else {
+      // Handle all other types of database or logic errors
+      console.log("Detected a general server error.");
+      res.status(500).json({
+        ok: false,
+        message: "Failed to create contract due to a server error.",
+        error: err.message,
+      });
+    }
+  }
+});
+
+// ==== CUSTOMER ====
+app.get("/api/get-customer", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_CUSTOMER}`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/get-customer-by-id", async (req, res) => {
+  const { id } = req.query;
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_CUSTOMER} WHERE id = '${id}'`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/get-no-customer", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT no_cus FROM dbo.${process.env.TABLE_CUSTOMER}`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/get-no-customer-edit", async (req, res) => {
+  const { no_cus } = req.query;
+
+  try {
+    const result = await pool.query(
+      `SELECT no_cus FROM dbo.${process.env.TABLE_CUSTOMER} WHERE no_cus != '${no_cus}'`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/get-kode-area", async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT kode_area FROM dbo.${process.env.TABLE_AREA}`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.post("/api/create-customer", upload.none(), async (req, res) => {
+  const { no_cus, nama_cus, alias, no_seri, kode_area } = req.body;
+  const now = dayjs();
+
+  const transaction = new sql.Transaction(pool);
+  try {
+    await transaction.begin();
+    const request = new sql.Request(transaction);
+
+    const query = `
+      INSERT INTO dbo.${
+        process.env.TABLE_CUSTOMER
+      } (no_cus, nama_cus, alias, no_seri, updated_at, created_by, kode_area)
+      VALUES ('${no_cus}', '${nama_cus}', '${alias}', '${no_seri}', '${formatDateForSQL(
+      now
+    )}', '1', '${kode_area}')
+    `;
+
+    await request.query(query);
+    await transaction.commit();
+    res.json({ ok: true, message: "Customer inserted" });
+  } catch (err) {
+    console.error(err);
+    try {
+      await transaction.rollback();
+      console.log("Transaction rolled back.");
+    } catch (rollbackErr) {
+      console.error("Error rolling back transaction:", rollbackErr);
+    }
+
+    if (err.name === "RequestError" && err.message.includes("Timeout")) {
+      console.log("Detected a database request timeout.");
+      // Use 408 Request Timeout for client-side handling
+      res.status(408).json({
+        ok: false,
+        message: "Database operation timed out. Please try again.",
+      });
+    } else {
+      // Handle all other types of database or logic errors
+      console.log("Detected a general server error.");
+      res.status(500).json({
+        ok: false,
+        message: "Failed to create contract due to a server error.",
+        error: err.message,
+      });
+    }
+  }
+});
+
+app.post("/api/edit-customer", upload.none(), async (req, res) => {
+  const { id = "" } = req.query;
+  const { no_cus, nama_cus, alias, no_seri, kode_area } = req.body;
+
+  const now = dayjs();
+  const transaction = new sql.Transaction(pool);
+  try {
+    await transaction.begin();
+    const request = new sql.Request(transaction);
+
+    const query = `
+      UPDATE dbo.${
+        process.env.TABLE_CUSTOMER
+      } SET no_cus = '${no_cus}', nama_cus = '${nama_cus}', alias = '${alias}', no_seri = '${no_seri}', updated_at = '${formatDateForSQL(
+      now
+    )}', kode_area = '${kode_area}' WHERE id = '${id}'
+    `;
+
+    await request.query(query);
+    await transaction.commit();
+    res.json({ ok: true, message: "Customer updated" });
   } catch (err) {
     console.error(err);
     try {

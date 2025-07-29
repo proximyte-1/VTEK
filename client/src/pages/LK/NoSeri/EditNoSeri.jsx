@@ -34,13 +34,13 @@ import { ExpandMoreRounded } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import { useParams } from "react-router-dom";
 import dayjs from "dayjs";
-import NumberFormatTextField from "../components/NumberFormatTextField/NumberFormatTextField";
+import NumberFormatTextField from "../../../components/NumberFormatTextField/NumberFormatTextField";
 import debounce from "lodash.debounce";
-import FileUpload from "../components/FileUpload/FileUpload";
-import { useAlert } from "../utils/alert";
+import FileUpload from "../../../components/FileUpload/FileUpload";
+import { useAlert } from "../../../utils/alert";
 import * as yup from "yup";
 import axios from "axios";
-import { displayFormatDate, displayValue } from "../utils/helpers";
+import { displayFormatDate, displayValue } from "../../../utils/helpers";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { Controller, useForm } from "react-hook-form";
 import {
@@ -50,7 +50,7 @@ import {
   selectProblem,
   selectStatusCall,
   selectStatusResult,
-} from "../utils/constants";
+} from "../../../utils/constants";
 import { yupResolver } from "@hookform/resolvers/yup";
 
 const EditNoSeri = () => {

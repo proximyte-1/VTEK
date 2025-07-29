@@ -11,10 +11,10 @@ import {
 } from "@mui/material";
 import dayjs from "dayjs";
 import { DataGrid } from "@mui/x-data-grid";
-import { useAlert } from "../utils/alert";
+import { useAlert } from "../../../utils/alert";
 import axios from "axios";
 
-const FLKNoSeri = () => {
+const NoNav = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -29,12 +29,13 @@ const FLKNoSeri = () => {
       },
     },
     {
-      field: "no_seri",
-      headerName: "No Seri",
+      field: "no_rep",
+      headerName: "No Report",
       flex: 1,
       minWidth: 150,
+      renderCell: (params) => `SPGFI${params.value}`,
     },
-    { field: "pelapor", headerName: "Nama Pelapor", flex: 1 },
+    { field: "pelapor", headerName: "Nama Pelapor", flex: 1, minWidth: 150 },
     {
       field: "waktu_mulai",
       headerName: "Waktu Mulai",
@@ -64,12 +65,11 @@ const FLKNoSeri = () => {
           <Button
             variant="contained"
             color="warning"
-            sx={{ marginX: 1 }}
             onClick={() => navigate(`edit/id=${params.row.id}`)}
+            sx={{ marginX: 1 }}
           >
             Edit
           </Button>
-
           <Button
             variant="contained"
             color="secondary"
@@ -91,7 +91,7 @@ const FLKNoSeri = () => {
     const fetchDataFLK = async () => {
       try {
         const response = await axios.get(
-          import.meta.env.VITE_API_URL + `api/get-flk-noseri`
+          import.meta.env.VITE_API_URL + `api/get-flk-norep`
         );
 
         const data = response.data;
@@ -115,7 +115,7 @@ const FLKNoSeri = () => {
       const data = datas.find(({ id }) => id == lk_id);
 
       const response = await fetch(
-        import.meta.env.VITE_API_URL + `api/export-lk-noseri`,
+        import.meta.env.VITE_API_URL + `api/export-lk-norep`,
         {
           method: "POST",
           headers: {
@@ -123,7 +123,7 @@ const FLKNoSeri = () => {
           },
           body: JSON.stringify({
             data: data,
-            reportTitle: `Report Laporan Kerja - Tanpa Barang`,
+            reportTitle: `Report Laporan Kerja - Dengan Barang`,
           }),
         }
       );
@@ -134,7 +134,7 @@ const FLKNoSeri = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `Report Satuan - Tanpa Barang ${dayjs().format(
+      link.download = `Report Satuan - Dengan Barang ${dayjs().format(
         "DD-MM-YYYY"
       )}.xlsx`;
       document.body.appendChild(link);
@@ -151,26 +151,24 @@ const FLKNoSeri = () => {
   return (
     <Container>
       <Typography variant="h4" gutterBottom>
-        Laporan Kerja - Tanpa Barang
+        Laporan Kerja - Dengan Barang
       </Typography>
       <Box sx={{ width: "100%", overflowX: "auto" }}>
-        <Box sx={{ minWidth: 700 }}>
-          <DataGrid
-            rows={datas}
-            columns={columns}
-            getRowId={(row) => row.id}
-            initialState={{
-              pagination: {
-                paginationModel: {
-                  pageSize: 5,
-                },
+        <DataGrid
+          rows={datas}
+          columns={columns}
+          columnBufferPx={columns.length} // Render all columns off-screen
+          getRowId={(row) => row.id}
+          initialState={{
+            pagination: {
+              paginationModel: {
+                pageSize: 5,
               },
-            }}
-            pageSizeOptions={[5]}
-            checkboxSelection
-            disableRowSelectionOnClick
-          />
-        </Box>
+            },
+          }}
+          pageSizeOptions={[5]}
+          disableRowSelectionOnClick
+        />
       </Box>
 
       {/* Link to Form Page */}
@@ -204,4 +202,4 @@ const FLKNoSeri = () => {
   );
 };
 
-export default FLKNoSeri;
+export default NoNav;

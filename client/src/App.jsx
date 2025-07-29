@@ -2,12 +2,8 @@ import "./App.css";
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Layout from "./Layout";
 import Home from "./pages/Home";
-import Add from "./pages/Add";
-import Edit from "./pages/Edit";
-import AddNoSeri from "./pages/AddNoSeri";
-import EditNoSeri from "./pages/EditNoSeri_new";
-import FLKNoSeri from "./pages/FLKNoSeri";
-import FLKNoRep from "./pages/FLKNoRep";
+import AddNoSeri from "./pages/LK/NoSeri/AddNoSeri";
+import EditNoSeri from "./pages/LK/NoSeri/EditNoSeri";
 import Report from "./pages/Report";
 import Users from "./pages/Users/Users";
 import AddUsers from "./pages/Users/AddUsers";
@@ -29,6 +25,18 @@ import ViewOriginContract from "./pages/Contract/ViewOriginContract";
 import Area from "./pages/Area/Area";
 import AddArea from "./pages/Area/AddArea";
 import EditArea from "./pages/Area/EditArea";
+import HistoryContract from "./pages/Contract/HistoryContract";
+import NoNav from "./pages/LK/NoNav/NoNav";
+import AddNoNav from "./pages/LK/NoNav/AddNoNav";
+import EditNoNav from "./pages/LK/NoNav/EditNoNav";
+import NoSeri from "./pages/LK/NoSeri/NoSeri";
+import Customer from "./pages/Customer/Customer";
+import AddCustomer from "./pages/Customer/AddCustomer";
+import EditCustomer from "./pages/Customer/EditCustomer";
+import PeriodeReport from "./pages/Report/PeriodeReport";
+import AreaReport from "./pages/Report/AreaReport";
+import CustomerReport from "./pages/Report/CustomerReport";
+import TeknisiReport from "./pages/Report/TeknisiReport";
 
 function App() {
   return (
@@ -39,15 +47,15 @@ function App() {
             <Route index element={<Home />} />
             {/* FLK Group */}
             <Route path="flk">
-              <Route index element={<FLKNoRep />} />
-              <Route path="add" element={<Add />} />
+              <Route index element={<NoNav />} />
+              <Route path="add" element={<AddNoNav />} />
               <Route path="search" element={<Search />} />
-              <Route path="edit/:id" element={<Edit />} />
+              <Route path="edit/:id" element={<EditNoNav />} />
             </Route>
 
             {/* FLK No Barang Group */}
             <Route path="flk-no-barang">
-              <Route index element={<FLKNoSeri />} />
+              <Route index element={<NoSeri />} />
               <Route path="add" element={<AddNoSeri />} />
               <Route path="search" element={<Search />} />
               <Route path="edit/:id" element={<EditNoSeri />} />
@@ -68,6 +76,7 @@ function App() {
               <Route path="view/:id" element={<ViewContract />} />
               <Route path="view-origin/:id" element={<ViewOriginContract />} />
               <Route path="instalasi/:id" element={<AddInstalasi_Contract />} />
+              <Route path="history/:id" element={<HistoryContract />} />
             </Route>
 
             {/* Instalasi Group */}
@@ -84,6 +93,13 @@ function App() {
               <Route path="edit/:id" element={<EditArea />} />
             </Route>
 
+            {/* Customer Group */}
+            <Route path="customer">
+              <Route index element={<Customer />} />
+              <Route path="add" element={<AddCustomer />} />
+              <Route path="edit/:id" element={<EditCustomer />} />
+            </Route>
+
             {/* Login / Auth Group */}
             <Route path="loginss" element={<LoginPage />} />
             <Route path="dashboard" element={<Dashboard />} />
@@ -95,7 +111,10 @@ function App() {
             <Route path="settings" element={<AdminSettings />} />
           </Route> */}
 
-            <Route path="report" element={<Report />} />
+            <Route path="report-periode" element={<PeriodeReport />} />
+            <Route path="report-area" element={<AreaReport />} />
+            <Route path="report-customer" element={<CustomerReport />} />
+            <Route path="report-teknisi" element={<TeknisiReport />} />
           </Route>
           <Route path="/login" element={<LoginPage />}></Route>
         </Routes>

@@ -9,7 +9,7 @@ const AuthContext = createContext([]);
 export const Auth = ({ children }) => {
   // Export Auth
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
@@ -30,7 +30,27 @@ export const Auth = ({ children }) => {
 
         // Axios automatically parses JSON, so response.data contains the user data.
         const userData = response.data;
-        setUser(userData);
+        const email = userData?._json?.email;
+
+        const db_response = await axios.get(
+          `${
+            import.meta.env.VITE_API_URL
+          }api/get-users-by-email?email=${email}`,
+          {
+            withCredentials: true,
+          }
+        );
+
+        const dbData = db_response.data[0];
+
+        const updatedUser = {
+          ...userData, // Start with all properties from userData
+          role: dbData?.role, // Add/overwrite role
+          type: dbData?.type, // Add/overwrite type
+          id_user: dbData?.id, // Add/overwrite id_user (renamed from dbData?.id)
+        };
+
+        setUser(updatedUser);
         setIsAuthenticated(true);
         // Your server's deserializeUser returns the full profile, which has a 'displayName' property.
         console.log(

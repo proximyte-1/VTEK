@@ -1,0 +1,52 @@
+USE [PJPNavisionExtension]
+GO
+
+-- Enable identity insert
+SET IDENTITY_INSERT [dbo].[VTK_User] ON;
+
+-- Insert 20 Teknisi
+INSERT INTO [dbo].[VTK_User] ([id], [name], [email], [role], [type])
+VALUES 
+(1,  'Teknisi 1',  'teknisi01@perdana.biz', 1, 2),
+(2,  'Teknisi 2',  'teknisi02@perdana.biz', 1, 2),
+(3,  'Teknisi 3',  'teknisi03@perdana.biz', 1, 2),
+(4,  'Teknisi 4',  'teknisi04@perdana.biz', 1, 2),
+(5,  'Teknisi 5',  'teknisi05@perdana.biz', 1, 2),
+(6,  'Teknisi 6',  'teknisi06@perdana.biz', 1, 2),
+(7,  'Teknisi 7',  'teknisi07@perdana.biz', 1, 2),
+(8,  'Teknisi 8',  'teknisi08@perdana.biz', 1, 2),
+(9,  'Teknisi 9',  'teknisi09@perdana.biz', 1, 2),
+(10, 'Teknisi 10', 'teknisi10@perdana.biz', 1, 2),
+(11, 'Teknisi 11', 'teknisi11@perdana.biz', 1, 2),
+(12, 'Teknisi 12', 'teknisi12@perdana.biz', 1, 2),
+(13, 'Teknisi 13', 'teknisi13@perdana.biz', 1, 2),
+(14, 'Teknisi 14', 'teknisi14@perdana.biz', 1, 2),
+(15, 'Teknisi 15', 'teknisi15@perdana.biz', 1, 2),
+(16, 'Teknisi 16', 'teknisi16@perdana.biz', 1, 2),
+(17, 'Teknisi 17', 'teknisi17@perdana.biz', 1, 2),
+(18, 'Teknisi 18', 'teknisi18@perdana.biz', 1, 2),
+(19, 'Teknisi 19', 'teknisi19@perdana.biz', 1, 2),
+(20, 'Teknisi 20', 'teknisi20@perdana.biz', 1, 2);
+GO
+
+-- Insert 4 Customer Service
+INSERT INTO [dbo].[VTK_User] ([id], [name], [email], [role], [type])
+VALUES 
+(21, 'CS 1', 'cs01@perdana.biz', 2, 1),
+(22, 'CS 2', 'cs02@perdana.biz', 2, 1),
+(23, 'CS 3', 'cs03@perdana.biz', 2, 1),
+(24, 'CS 4', 'cs04@perdana.biz', 2, 1);
+GO
+
+-- Insert 4 Supervisor
+INSERT INTO [dbo].[VTK_User] ([id], [name], [email], [role], [type])
+VALUES 
+(25, 'Supervisor 1', 'supervisor01@perdana.biz', 2, 1),
+(26, 'Supervisor 2', 'supervisor02@perdana.biz', 2, 1),
+(27, 'Supervisor 3', 'supervisor03@perdana.biz', 2, 1),
+(28, 'Supervisor 4', 'supervisor04@perdana.biz', 2, 1);
+GO
+
+-- Disable identity insert
+SET IDENTITY_INSERT [dbo].[VTK_User] OFF;
+GO

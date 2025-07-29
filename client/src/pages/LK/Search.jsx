@@ -41,6 +41,8 @@ const Search = () => {
       field: "no",
       headerName: "No.",
       sortable: false,
+      flex: 0,
+      width: 10,
       renderCell: (params) => {
         return params.api.getAllRowIds().indexOf(params.id) + 1;
       },
@@ -55,6 +57,13 @@ const Search = () => {
     {
       field: "d:Sell_to_Customer_Name",
       headerName: "Nama Customer",
+      flex: 1,
+      width: 100,
+      renderCell: (params) => `${displayValue(params.value)}`,
+    },
+    {
+      field: "d:Serial_No",
+      headerName: "No Seri",
       flex: 1,
       width: 100,
       renderCell: (params) => `${displayValue(params.value)}`,
@@ -68,44 +77,9 @@ const Search = () => {
     },
   ];
 
-  const columns_seri = [
-    {
-      field: "no",
-      headerName: "No.",
-      sortable: false,
-      renderCell: (params) => {
-        return params.api.getAllRowIds().indexOf(params.id) + 1;
-      },
-    },
-    {
-      field: "d:Serial_No",
-      headerName: "No Seri",
-      flex: 1,
-      width: 100,
-      renderCell: (params) => `${displayValue(params.value)}`,
-    },
-    {
-      field: "d:Sell_to_Customer_No",
-      headerName: "No Customer",
-      flex: 1,
-      width: 100,
-      renderCell: (params) => `${displayValue(params.value)}`,
-    },
-    {
-      field: "d:Sell_to_Customer_Name",
-      headerName: "Nama Customer",
-      flex: 1,
-      width: 100,
-      renderCell: (params) => `${displayValue(params.value)}`,
-    },
-  ];
-
   const [loading, setLoading] = useState(false);
   const [datas, setDatas] = useState([]);
-  const [dataNoSeri, setDataNoSeri] = useState([]);
-  const [customer, setCustomer] = useState([]);
   const [selected, setSelected] = useState();
-  const [no_seri, setNoSeri] = useState();
   const { alert, showAlert, closeAlert } = useAlert();
 
   const handleChange = (e) => {
@@ -116,9 +90,11 @@ const Search = () => {
   };
 
   const handleSeachCustomer = async () => {
+    if (!filter.nama_customer || filter.nama_customer.length < 5) {
+      showAlert("Minimal 5 character for search", "error");
+      return;
+    }
     setLoading(true);
-    setDataNoSeri([]);
-    setCustomer([]);
     try {
       const nama_cust = filter.nama_customer.toUpperCase();
       const response = await axios.get(
@@ -131,56 +107,29 @@ const Search = () => {
       );
 
       const data = response.data;
-      console.log(data);
 
       if (!data.ok) throw new Error("Search Failed");
 
       const all_data = data.data;
-      const uniqueMap = new Map();
+      const seenCombinations = new Set(); // Use a Set to store unique combinations
+      const result = [];
 
-      all_data.forEach((item) => {
-        const customerNo = item["d:Sell_to_Customer_No"];
+      for (const item of all_data) {
+        // Create a unique key for each combination of no_cus and no_seri
+        const combinationKey = `${item["d:Sell_to_Customer_No"]}-${item["d:Serial_No"]}`;
 
-        if (!uniqueMap.has(customerNo)) {
-          uniqueMap.set(customerNo, item);
+        if (!item["d:Sell_to_Customer_No"] || !item["d:Serial_No"]) {
+          continue;
         }
-      });
 
-      const uniqueData = Array.from(uniqueMap.values());
-
-      setDatas(all_data);
-      setCustomer(uniqueData);
-      setLoading(false);
-    } catch (error) {
-      console.error("Filter error : ", error);
-      showAlert("Filter Failed !!", "error");
-      setLoading(false);
-    }
-  };
-
-  const handleSearchNoSeri = async () => {
-    setLoading(true);
-    setDataNoSeri([]);
-    try {
-      const no_cus = selected;
-      const map_data = new Map();
-      const uniqueMap = new Map();
-
-      datas.forEach((item) => {
-        if (item["d:Sell_to_Customer_No"] === no_cus) {
-          map_data.set(item);
-
-          const noSeri = item["d:Serial_No"];
-
-          if (!uniqueMap.has(noSeri)) {
-            uniqueMap.set(noSeri, item);
-          }
+        // If the combination has not been seen before, add it to the result and the Set
+        if (!seenCombinations.has(combinationKey)) {
+          seenCombinations.add(combinationKey);
+          result.push(item);
         }
-      });
+      }
 
-      const uniqueData = Array.from(uniqueMap.values());
-
-      setDataNoSeri(uniqueData);
+      setDatas(result);
       setLoading(false);
     } catch (error) {
       console.error("Filter error : ", error);
@@ -190,6 +139,11 @@ const Search = () => {
   };
 
   const handleSubmit = () => {
+    if (!selected) {
+      showAlert("No. Seri belum dipilih.", "error");
+      return;
+    }
+    const no_seri = displayValue(selected);
     navigate("/flk-no-barang/add", { state: { initialNoSeri: no_seri } });
   };
 
@@ -210,6 +164,7 @@ const Search = () => {
                 value={filter.nama_customer}
                 name="nama_customer"
                 onChange={handleChange}
+                helperText="Minimum 5 characters"
               />
             </Grid>
 
@@ -233,9 +188,9 @@ const Search = () => {
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Box sx={{ minWidth: 700 }}>
           <DataGrid
-            rows={customer}
+            rows={datas}
             columns={columns}
-            getRowId={(row) => customer.indexOf(row)}
+            getRowId={(row) => datas.indexOf(row)}
             initialState={{
               pagination: {
                 paginationModel: {
@@ -245,45 +200,8 @@ const Search = () => {
             }}
             pageSizeOptions={[5]}
             onRowClick={(params) => {
-              setSelected(params.row["d:Sell_to_Customer_No"]);
-              // console.log("Row clicked:", params.row);
-            }}
-          />
-        </Box>
-      </Box>
-
-      {/* Link to Form Page */}
-      <Button
-        variant="contained"
-        color="primary"
-        style={{ marginTop: "20px", marginBottom: "20px" }}
-        onClick={handleSearchNoSeri}
-      >
-        {loading ? (
-          <CircularProgress size={24} color="info" />
-        ) : (
-          "Search No Seri"
-        )}
-      </Button>
-
-      {/* No Seri */}
-      <Box sx={{ width: "100%", overflowX: "auto" }}>
-        <Box sx={{ minWidth: 700 }}>
-          <DataGrid
-            rows={dataNoSeri}
-            columns={columns_seri}
-            getRowId={(row) => dataNoSeri.indexOf(row)}
-            initialState={{
-              pagination: {
-                paginationModel: {
-                  pageSize: 5,
-                },
-              },
-            }}
-            pageSizeOptions={[5]}
-            onRowClick={(params) => {
-              setNoSeri(params.row["d:Serial_No"]);
-              // console.log("Row clicked:", params.row);
+              setSelected(params.row["d:Serial_No"]);
+              console.log("Row clicked:", params.row);
             }}
           />
         </Box>

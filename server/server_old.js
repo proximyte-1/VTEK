@@ -392,6 +392,7 @@ app.post("/api/create-flk", upload.single("pic"), async (req, res) => {
       created_by,
       deleted_at,
       no_lap,
+      no_fd,
     } = fields;
 
     // Sanitize Null
@@ -405,17 +406,17 @@ app.post("/api/create-flk", upload.single("pic"), async (req, res) => {
     const selesai = formatDateForSQL(waktu_selesai);
 
     const result = await pool.query`
-      INSERT INTO [dbo].[WebVTK] (
+      INSERT INTO [dbo].${process.env.TABLE_LK} (
         no_rep, no_cus, no_call, pelapor, waktu_call, waktu_dtg, status_call,
         keluhan, kat_keluhan, problem, kat_problem, solusi, waktu_mulai,
         waktu_selesai, count_bw, count_cl, saran, status_res, rep_ke, no_seri,
-        type, created_by, deleted_at, pic, no_lap
+        type, created_by, deleted_at, pic, no_lap, no_fd
       ) OUTPUT INSERTED.id VALUES (
         ${no_rep}, ${no_cus}, ${no_call}, ${pelapor}, ${call}, ${dtg},
         ${status_call}, ${keluhan}, ${kat_keluhan}, ${problem}, ${kat_problem},
         ${solusi}, ${mulai}, ${selesai}, ${count_bw}, ${count_cl},
         ${saran}, ${status_res}, ${rep_ke}, ${no_seri}, ${type},
-        ${created_by}, ${deleted_at}, ${filePath}, ${no_lap}
+        ${created_by}, ${deleted_at}, ${filePath}, ${no_lap}, ${no_fd}
       )
     `;
 
@@ -485,6 +486,7 @@ app.post("/api/edit-flk", upload.single("pic"), async (req, res) => {
       saran,
       status_res,
       no_lap,
+      no_fd,
     } = fields;
 
     // Sanitize Null
@@ -499,7 +501,7 @@ app.post("/api/edit-flk", upload.single("pic"), async (req, res) => {
     const selesai = formatDateForSQL(waktu_selesai);
 
     let query = `
-      UPDATE [dbo].[WebVTK]
+      UPDATE [dbo].${process.env.TABLE_LK}
       SET 
         no_seri = '${no_seri}', no_cus = '${no_cus}',
         no_call = '${no_call}', pelapor = '${pelapor}', waktu_call = '${call}',
@@ -508,7 +510,7 @@ app.post("/api/edit-flk", upload.single("pic"), async (req, res) => {
         problem = '${problem}', kat_problem = '${kat_problem}', solusi = '${solusi}',
         waktu_mulai = '${mulai}', waktu_selesai = '${selesai}',
         count_bw = '${count_bw}', count_cl = '${count_cl}',
-        saran = '${saran}', status_res = '${status_res}', no_lap = '${no_lap}'
+        saran = '${saran}', status_res = '${status_res}', no_lap = '${no_lap}', no_fd = '${no_fd}'
     `;
 
     if (rep_ke) {

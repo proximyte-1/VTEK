@@ -20,47 +20,51 @@ import {
   InputAdornment,
   Box,
 } from "@mui/material";
-import {
-  selectStatusCall,
-  selectKeluhan,
-  selectProblem,
-  selectStatusResult,
-  minDateTime,
-  maxDateTime,
-} from "../utils/constants";
-import {
-  displayValue,
-  columnsBarang,
-  displayFormatDate,
-} from "../utils/helpers";
-import { useAlert } from "../utils/alert";
 import { LocalizationProvider } from "@mui/x-date-pickers/LocalizationProvider";
 import { DateTimePicker } from "@mui/x-date-pickers/DateTimePicker";
-import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
+import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { ExpandMoreRounded } from "@mui/icons-material";
-import dayjs from "dayjs";
 import { useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
+import dayjs from "dayjs";
 import { DataGrid } from "@mui/x-data-grid";
-import NumberFormatTextField from "../components/NumberFormatTextField/NumberFormatTextField";
-import FileUpload from "../components/FileUpload/FileUpload";
-import { useForm, Controller } from "react-hook-form";
-import { yupResolver } from "@hookform/resolvers/yup";
-import * as yup from "yup";
+import NumberFormatTextField from "../../../components/NumberFormatTextField/NumberFormatTextField";
+import debounce from "lodash.debounce";
+import FileUpload from "../../../components/FileUpload/FileUpload";
+import { useAlert } from "../../../utils/alert";
 import axios from "axios";
+import { Controller, useForm } from "react-hook-form";
+import * as yup from "yup";
+import { yupResolver } from "@hookform/resolvers/yup";
+import {
+  columnsBarang,
+  displayFormatDate,
+  displayValue,
+} from "../../../utils/helpers";
+import {
+  maxDateTime,
+  minDateTime,
+  selectKeluhan,
+  selectProblem,
+  selectStatusCall,
+  selectStatusResult,
+} from "../../../utils/constants";
+import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 
-const Add = () => {
+const EditNoNav = () => {
+  const { id } = useParams();
   const navigate = useNavigate();
 
-  const { alert, showAlert, closeAlert } = useAlert();
   const [barang, setDataBarang] = useState([]);
   const [customer, setDataCustomer] = useState([]);
-  const [searched, setSearched] = useState(false);
+  const [searched, setSearched] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [data_no_rep, setDataNoRep] = useState([]);
+  const [expand, setExpand] = useState(true);
   const [lastService, setLastService] = useState([]);
   const [contract, setContract] = useState([]);
   const [instalasi, setInstalasi] = useState([]);
-  const [expand, setExpand] = useState(true);
+  const [area, setArea] = useState([]);
+  const { alert, showAlert, closeAlert } = useAlert();
   const [retry, setRetry] = useState(false);
 
   const schemaNoRep = useMemo(() => {
@@ -89,10 +93,10 @@ const Add = () => {
         .required()
         .test(
           "not-less-than-previous-bw",
-          `Tidak boleh kurang dari data sebelumnya (${lastService?.count_bw}).`,
+          `Tidak boleh kurang dari data sebelumnya (${lastService.count_bw}).`,
           function (value) {
             const { count_bw } = lastService;
-            const n_count = Number(count_bw) || 0;
+            const n_count = Number(count_bw);
             const n_val = Number(value);
 
             if (n_val === undefined || n_val === null) return false;
@@ -104,10 +108,10 @@ const Add = () => {
         .required()
         .test(
           "not-less-than-previous-cl",
-          `Tidak boleh kurang dari data sebelumnya (${lastService?.count_cl}).`,
+          `Tidak boleh kurang dari data sebelumnya (${lastService.count_cl}).`,
           function (value) {
             const { count_cl } = lastService;
-            const n_count = Number(count_cl) || 0;
+            const n_count = Number(count_cl);
             const n_val = Number(value);
 
             if (n_val === undefined || n_val === null) return false;
@@ -161,7 +165,7 @@ const Add = () => {
     formState: { errors },
   } = useForm({
     resolver: yupResolver(schemaNoRep),
-    context: { isEdit: false },
+    context: { isEdit: true },
     defaultValues: {
       no_rep: "",
       no_call: "",
@@ -189,86 +193,72 @@ const Add = () => {
 
   let statusRes = watch("status_res");
 
-  useEffect(() => {
-    const fetchNoRep = async () => {
-      try {
-        const response = await axios.get(
-          `${import.meta.env.VITE_API_URL}api/get-no-rep`
-        );
-        setDataNoRep(response.data);
-      } catch (error) {
-        console.error("Error fetching No Report:", error);
-      }
-    };
-
-    fetchNoRep();
-  }, []);
-
   const handleFileSelect = (file) => {
     setValue("pic", file, { shouldValidate: true });
   };
 
-  const fetchDataBarang = async (id) => {
-    try {
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}api/nav-data?id=${id}`
-      );
-      const data = response.data;
+  useEffect(() => {
+    const fetchFlkData = async () => {
+      try {
+        const response = await axios.get(
+          import.meta.env.VITE_API_URL + `api/get-flk-one-by-id?${id}`
+        );
+        const datas = response.data[0];
 
-      if (data.length <= 0) {
-        showAlert("Nomor Report Belum Ada Pada Navision", "error");
-        setSearched(false);
-        return null;
-      }
+        if (datas && datas.no_rep) {
+          Object.entries(datas).forEach(([key, value]) => {
+            let parsedValue = value;
 
-      const customerData = data[0];
+            if (
+              [
+                "waktu_call",
+                "waktu_dtg",
+                "waktu_mulai",
+                "waktu_selesai",
+              ].includes(key)
+            ) {
+              parsedValue = value ? new Date(value) : null;
+            }
 
-      showAlert("Nomor Report Belum Dipakai", "success");
-      setSearched(true);
-      setDataBarang(data);
-      setDataCustomer(customerData);
+            setValue(key, parsedValue, { shouldDirty: true });
+          });
 
-      // Update form values using react-hook-form's setValue
-      setValue("no_seri", customerData["d:Serial_No"]);
-      setValue("no_cus", customerData["d:Sell_to_Customer_No"]);
+          // Fetch related data
+          const customer = await fetchDataBarang(datas.no_rep);
+          if (customer) {
+            const dataLastService = await fetchLastService(
+              displayValue(customer["d:Serial_No"])
+            );
 
-      return customerData;
-    } catch (error) {
-      console.error("Error fetching barang:", error);
-      showAlert("Gagal mengambil data dari server", "error");
-      setSearched(false);
-    }
-  };
+            const dataContract = await fetchDataContract(
+              displayValue(customer["d:Sell_to_Customer_No"])
+            );
 
-  const fetchContRes = async (id_cus, serialNo) => {
-    try {
-      const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}api/get-rep-seri-by-cus`,
-        {
-          params: {
-            id_cus: id_cus,
-            value: serialNo,
-          },
+            const dataArea = await fetchDataArea(
+              displayValue(customer["d:Sell_to_Customer_No"])
+            );
+
+            await fetchContRes(
+              customer["d:Sell_to_Customer_No"],
+              customer["d:Serial_No"]
+            );
+          }
+          setExpand(false);
+        } else {
+          console.error("No data found or no_rep is missing");
+          showAlert(
+            "Gagal mendapat data laporan no rep tidak ditemukan.",
+            "error"
+          );
         }
-      );
-
-      const data = response.data;
-
-      if (data.length <= 0) {
-        setValue("rep_ke", 0);
-        return;
+      } catch (error) {
+        console.error("Fetch failed:", error);
+        showAlert("Gagal mendapat data laporan.", "error");
       }
+    };
 
-      const increment = data[0]["rep_ke"] + 1;
-
-      if (data[0]["status_res"] === "CONT") {
-        setValue("rep_ke", increment);
-      }
-    } catch (error) {
-      console.error("Error fetching continuation status:", error);
-      showAlert("Gagal mengambil status report sebelumnya", "error");
-    }
-  };
+    fetchFlkData(id);
+  }, [id]);
 
   const fetchLastService = async (no_seri) => {
     try {
@@ -284,7 +274,11 @@ const Add = () => {
       const data = response.data;
 
       if (data.length <= 0) {
-        setLastService(null);
+        setLastService({
+          count_bw: 0,
+          count_cl: 0,
+          waktu_selesai: null,
+        });
         return;
       }
 
@@ -292,6 +286,31 @@ const Add = () => {
     } catch (error) {
       console.error("Error fetching last service:", error);
       showAlert("Gagal mengambil service sebelumnya", "error");
+    }
+  };
+
+  const fetchDataArea = async (no_cus) => {
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}api/get-area-lk`,
+        {
+          params: {
+            no_cus: no_cus,
+          },
+        }
+      );
+
+      const data = response.data;
+
+      if (data.length <= 0) {
+        setArea(null);
+        return;
+      }
+
+      setArea(data[0]);
+    } catch (error) {
+      console.error("Error fetching data area:", error);
+      showAlert("Gagal mengambil data area", "error");
     }
   };
 
@@ -313,6 +332,8 @@ const Add = () => {
         return;
       }
 
+      const dataInstalasi = await fetchDataInstalasi(displayValue(data[0].id));
+
       setContract(data[0]);
     } catch (error) {
       console.error("Error fetching contract:", error);
@@ -320,13 +341,13 @@ const Add = () => {
     }
   };
 
-  const fetchDataInstalasi = async (no_seri) => {
+  const fetchDataInstalasi = async (id_contract) => {
     try {
       const response = await axios.get(
         `${import.meta.env.VITE_API_URL}api/get-instalasi-lk`,
         {
           params: {
-            no_seri: no_seri,
+            id_contract: id_contract,
           },
         }
       );
@@ -345,81 +366,50 @@ const Add = () => {
     }
   };
 
-  const handleSearch = async () => {
-    setLoading(true);
-
-    const noRep = getValues("no_rep");
-
-    if (!noRep) {
-      showAlert("Terjadi kesalahan saat mencari data.", "error");
-      setSearched(false);
-      setLoading(false);
-      return;
-    }
-
-    reset({ no_rep: noRep });
-
-    // Check if no_rep is already used
-    if (data_no_rep.some((item) => item.no_rep === noRep)) {
-      showAlert("Nomor Report Sudah Pernah Dipakai.", "error");
-      setSearched(false);
-      setLoading(false);
-      return;
-    }
-
+  const fetchDataBarang = async (id) => {
     try {
-      // Fetch customer data
-      const customer = await fetchDataBarang(noRep);
-      if (customer) {
-        const dataLastService = await fetchLastService(
-          displayValue(customer["d:Serial_No"])
-        );
+      const fetch_barang = await axios.get(
+        import.meta.env.VITE_API_URL + `api/nav-data?id=${id}`
+      );
+      const data = fetch_barang.data;
 
-        const dataContract = await fetchDataContract(
-          displayValue(customer["d:Sell_to_Customer_No"])
-        );
-
-        const dataInstalasi = await fetchDataInstalasi(
-          displayValue(customer["d:Serial_No"])
-        );
-
-        await fetchContRes(
-          customer["d:Sell_to_Customer_No"],
-          customer["d:Serial_No"]
-        );
+      if (!data.length <= 0) {
+        setDataBarang(data);
+        setDataCustomer(data[0]);
       }
 
-      setExpand(false);
-      setLoading(false);
+      return data[0]["d:Sell_to_Customer_No"];
     } catch (error) {
-      console.error("Error in handleSearch:", error);
-      showAlert("Terjadi kesalahan saat mencari data.", "error");
-      setLoading(false);
+      console.error("Error fetching barang:", error);
+      showAlert("Ambil data barang gagal.", "error");
     }
   };
 
-  const submitBarang = () => {
-    const data = [];
-    barang.map((item) => {
-      const field = {
-        no_brg: item["d:ItemNo"],
-        nama: item["d:Machine_Name"],
-        qty: item["d:Quantity"]["_"],
-      };
+  const fetchContRes = async (id_cus, no_seri) => {
+    const response = await axios.get(
+      import.meta.env.VITE_API_URL +
+        `api/get-rep-seri-by-cus?id_cus=${id_cus}&no_seri=${no_seri}&${id}`
+    );
+    const data = response.data;
 
-      data.push(field);
-    });
+    if (data.length <= 0) {
+      return;
+    }
 
-    return data;
+    const incre = data[0]["rep_ke"] + 1;
+
+    if (data[0]["status_res"] === "CONT") {
+      setValue("rep_ke", incre);
+    }
   };
 
   const onSubmit = async (values) => {
     setLoading(true);
-
     try {
       const data = new FormData();
 
       // Always append the file
+      // data.append("pic", getValues("pic"));
       data.append("created_by", 1);
       data.append("type", 1);
 
@@ -441,39 +431,20 @@ const Add = () => {
 
       // Submit main form
       const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}api/create-flk`,
-        data,
-        { timeout: 5000 }
-      );
-      const { data: result } = response;
-
-      if (!response.data || !result.data?.id) {
-        throw new Error("Gagal menyimpan data utama.");
-      }
-
-      const reportId = result.data.id;
-
-      // Submit barang list
-      const barangPayload = {
-        no_lk: reportId,
-        items: submitBarang(), // Assuming submitBarang() returns array of items
-      };
-
-      const barangResponse = await axios.post(
-        `${import.meta.env.VITE_API_URL}api/create-brg`,
-        barangPayload
+        `${import.meta.env.VITE_API_URL}api/edit-flk?${id}`,
+        data
       );
 
-      if (barangResponse.status === 200) {
+      if (response.data.ok) {
         setRetry(false);
         navigate("/flk", {
           state: {
-            message: "Data Laporan Kerja Berhasil Ditambahkan!",
+            message: "Data Laporan Kerja Berhasil Diubah!",
             severity: "success",
           },
         });
       } else {
-        showAlert("Add Data Barang Failed !!", "error");
+        showAlert("Data Laporan Kerja Gagal Diubah !!", "error");
       }
     } catch (error) {
       console.error("Error submitting data:", error);
@@ -502,25 +473,25 @@ const Add = () => {
   return (
     <Paper sx={{ padding: 3, marginBottom: 5 }} elevation={4}>
       <Typography variant="h5" marginBottom={"1.5em"} gutterBottom>
-        New Laporan Kerja
+        Edit Form Laporan Kerja
       </Typography>
       <LocalizationProvider dateAdapter={AdapterDateFns}>
         <form
           onSubmit={handleSubmit(onSubmit, onInvalid)}
           encType="multipart/form-data"
-          noValidate
         >
           <Grid container spacing={5} marginY={"2em"} alignItems="center">
             {/* Input Report */}
             <Grid size={{ xs: 12, md: 6 }}>
               <TextField
                 label="No. Report / No. Navision"
+                variant="outlined"
                 fullWidth
                 {...register("no_rep")}
                 error={!!errors.no_rep}
                 helperText={errors.no_rep?.message}
-                variant="outlined"
                 type="number"
+                disabled
                 slotProps={{
                   input: {
                     startAdornment: (
@@ -529,19 +500,6 @@ const Add = () => {
                   },
                 }}
               />
-            </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Button
-                type="button"
-                name="search"
-                id="search"
-                variant="contained"
-                color="primary"
-                onClick={handleSearch}
-                disabled={loading}
-              >
-                {loading ? <CircularProgress size={24} /> : "Search"}
-              </Button>
             </Grid>
             <Grid container spacing={5}>
               {/* Accordion 1 - Non Input */}
@@ -616,7 +574,7 @@ const Add = () => {
                   </AccordionSummary>
                   <AccordionDetails>
                     <Grid container spacing={5}>
-                      {/* Row 1 */}
+                      {/* Row    */}
                       <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                         <Typography>
                           No Seri : {displayValue(customer?.["d:Serial_No"])}
@@ -633,7 +591,7 @@ const Add = () => {
                       {/* Row 2 */}
                       <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                         <Typography>
-                          Tanggal Instalasi :{" "}
+                          Tanggal Instalasi :
                           {displayFormatDate(instalasi?.tgl_instalasi)}
                         </Typography>
                         <Typography>
@@ -641,7 +599,8 @@ const Add = () => {
                           {displayFormatDate(contract?.tgl_contract_exp)}
                         </Typography>
                         <Typography>
-                          Tipe Service : {displayValue(contract?.type_service)}
+                          Tipe Service :{" "}
+                          {displayFormatDate(contract?.type_service)}
                         </Typography>
                       </Grid>
 
@@ -780,44 +739,8 @@ const Add = () => {
                               ampm={false}
                               minDateTime={new Date(minDateTime)}
                               maxDateTime={new Date(maxDateTime)}
-                              format="dd-MM-yy HH:mm"
                               {...field}
-                              // onChange={(newValue) => {
-                              //   const now = dayjs();
-                              //   const diffInDays = now.diff(
-                              //     dayjs(newValue),
-                              //     "day"
-                              //   );
-
-                              //   if (
-                              //     diffInDays <
-                              //     import.meta.env.VITE_FORWARD_PENJADWALAN_DAYS
-                              //   ) {
-                              //     showAlert(
-                              //       `Waktu tidak boleh lebih dari ${
-                              //         import.meta.env
-                              //           .VITE_FORWARD_PENJADWALAN_DAYS
-                              //       } hari ke depan.`,
-                              //       "error"
-                              //     );
-                              //     return;
-                              //   }
-
-                              //   if (
-                              //     diffInDays >
-                              //     import.meta.env.VITE_BACKDATE_DAYS
-                              //   ) {
-                              //     showAlert(
-                              //       `Waktu tidak boleh lebih dari ${
-                              //         import.meta.env.VITE_BACKDATE_DAYS
-                              //       } hari ke belakang.`,
-                              //       "error"
-                              //     );
-                              //     return;
-                              //   }
-
-                              //   field.onChange(newValue); // still update the form
-                              // }}
+                              format="dd-MM-yy HH:mm"
                               slotProps={{
                                 textField: {
                                   fullWidth: true,
@@ -945,8 +868,8 @@ const Add = () => {
               {/* Accordion 4 */}
               <Grid size={12}>
                 <Accordion
-                  expanded={!expand}
                   disabled={!searched || !getValues("no_rep")}
+                  expanded={!expand}
                 >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
@@ -954,7 +877,7 @@ const Add = () => {
                     id="panel1-header"
                   >
                     <Typography component="span" variant="h5">
-                      Detail Hasil Service
+                      Detail Report
                     </Typography>
                   </AccordionSummary>
                   <AccordionDetails>
@@ -1034,31 +957,6 @@ const Add = () => {
                               maxDateTime={new Date(maxDateTime)}
                               format="dd-MM-yy HH:mm"
                               {...field}
-                              // onChange={(newValue) => {
-                              //   const now = dayjs();
-                              //   const diffInDays = now.diff(
-                              //     dayjs(newValue),
-                              //     "day"
-                              //   );
-
-                              //   if (diffInDays < -maxForwardDays) {
-                              //     showAlert(
-                              //       `Waktu tidak boleh lebih dari ${maxForwardDays} hari ke depan.`,
-                              //       "error"
-                              //     );
-                              //     return;
-                              //   }
-
-                              //   if (diffInDays > maxBackdateDays) {
-                              //     showAlert(
-                              //       `Waktu tidak boleh lebih dari ${maxBackdateDays} hari ke belakang.`,
-                              //       "error"
-                              //     );
-                              //     return;
-                              //   }
-
-                              //   field.onChange(newValue);
-                              // }}
                               slotProps={{
                                 textField: {
                                   fullWidth: true,
@@ -1140,7 +1038,7 @@ const Add = () => {
                           sx={{ color: "rgba(0, 0, 0, 0.6)" }}
                           id="count_cl"
                         >
-                          Counter C/L
+                          Counter CL
                         </Typography>
                         <Controller
                           name="count_cl"
@@ -1226,8 +1124,8 @@ const Add = () => {
               {/* Accordion 5 - Table */}
               <Grid size={12}>
                 <Accordion
-                  expanded={!expand}
                   disabled={!searched || !getValues("no_rep")}
+                  expanded={!expand}
                 >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
@@ -1239,7 +1137,6 @@ const Add = () => {
                     </Typography>
                   </AccordionSummary>
                   <AccordionDetails>
-                    {/* Table */}
                     <Box sx={{ width: "100%", overflowX: "auto" }}>
                       <Box sx={{ minWidth: 700 }}>
                         <DataGrid
@@ -1339,4 +1236,4 @@ const Add = () => {
   );
 };
 
-export default Add;
+export default EditNoNav;

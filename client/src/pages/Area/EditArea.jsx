@@ -35,6 +35,7 @@ const EditArea = () => {
   const { alert, showAlert, closeAlert } = useAlert();
   const [loading, setLoading] = useState(false);
   const [dataUser, setDataUser] = useState([]);
+  const [dataSPV, setDataSPV] = useState([]);
   const [retry, setRetry] = useState(false);
 
   const schema = useMemo(() => {
@@ -43,6 +44,7 @@ const EditArea = () => {
       nama_area: yup.string().required(),
       groups: yup.string().required(),
       id_supervisor: yup.number().required(),
+      id_teknisi: yup.number().required(),
     });
   }, []);
 
@@ -63,6 +65,7 @@ const EditArea = () => {
       nama_area: "",
       groups: "",
       id_supervisor: "",
+      id_teknisi: "",
     },
   });
 
@@ -90,14 +93,16 @@ const EditArea = () => {
       }
     };
 
-    const fetchUserData = async () => {
+    const getUserData = () => {
       try {
         axios
-          .get(`${import.meta.env.VITE_API_URL}api/get-users`)
+          .get(`${import.meta.env.VITE_API_URL}api/get-teknisi`)
           .then((res) => {
             if (res.data.length >= 0) {
               const data = res.data;
               setDataUser(data);
+            } else {
+              showAlert("Data user teknisi belum ada.", "error");
             }
           });
       } catch (err) {
@@ -106,8 +111,25 @@ const EditArea = () => {
       }
     };
 
+    const getSPVData = () => {
+      try {
+        axios.get(`${import.meta.env.VITE_API_URL}api/get-spv`).then((res) => {
+          if (res.data.length >= 0) {
+            const data = res.data;
+            setDataSPV(data);
+          } else {
+            showAlert("Data user supervisor belum ada.", "error");
+          }
+        });
+      } catch (err) {
+        console.error("Terjadi kesalahan saat memanggil data: ", err);
+        showAlert("Terjadi kesalahan saat memanggil data", "error");
+      }
+    };
+
     fetchAreaById();
-    fetchUserData();
+    getUserData();
+    getSPVData();
   }, []);
 
   const onSubmit = async (values) => {
@@ -213,7 +235,7 @@ const EditArea = () => {
               />
             </Grid>
 
-            {dataUser && (
+            {dataSPV && (
               <Grid size={{ xs: 12, md: 6 }}>
                 <Controller
                   name="id_supervisor"
@@ -230,7 +252,7 @@ const EditArea = () => {
                         {...field}
                         displayEmpty
                       >
-                        {dataUser.map((item) => (
+                        {dataSPV.map((item) => (
                           <MenuItem key={item.id} value={item.id}>
                             {item.name}
                           </MenuItem>
@@ -239,6 +261,40 @@ const EditArea = () => {
                       {errors.id_supervisor && (
                         <FormHelperText>
                           {errors.id_supervisor?.message}
+                        </FormHelperText>
+                      )}
+                    </FormControl>
+                  )}
+                />
+              </Grid>
+            )}
+
+            {dataUser && (
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Controller
+                  name="id_teknisi"
+                  control={control}
+                  rules={{ required: "Teknisi is required" }} // Add your validation rules here
+                  render={({ field }) => (
+                    <FormControl fullWidth error={!!errors.id_teknisi}>
+                      <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
+                        Pilih Teknisi
+                      </Typography>
+                      <Select
+                        id="teknisi-select"
+                        variant="outlined"
+                        {...field}
+                        displayEmpty
+                      >
+                        {dataUser.map((item) => (
+                          <MenuItem key={item.id} value={item.id}>
+                            {item.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      {errors.id_teknisi && (
+                        <FormHelperText>
+                          {errors.id_teknisi?.message}
                         </FormHelperText>
                       )}
                     </FormControl>

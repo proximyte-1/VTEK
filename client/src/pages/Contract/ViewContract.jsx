@@ -300,10 +300,21 @@ const ViewContract = () => {
             variant="contained"
             color="primary"
             disabled={loading}
-            sx={{ width: isSmallScreen ? "100%" : "auto" }}
+            sx={{ width: isSmallScreen ? "100%" : "auto", marginX: 1 }}
             onClick={() => navigate(`/contract/view-origin/${id}`)}
           >
             Kontrak Awal
+          </Button>
+
+          <Button
+            type="button"
+            variant="contained"
+            color="primary"
+            disabled={loading}
+            sx={{ width: isSmallScreen ? "100%" : "auto", marginX: 1 }}
+            onClick={() => navigate(`/contract/history/${id}`)}
+          >
+            Historis Mesin
           </Button>
         </Grid>
       </Grid>

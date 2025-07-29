@@ -13,40 +13,45 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Box,
   FormControl,
-  FormHelperText,
 } from "@mui/material";
 import { useAlert } from "../../utils/alert";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import axios from "axios";
-import dayjs from "dayjs";
+import * as yup from "yup";
 import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { maxDateTime, minDateTime, selectService } from "../../utils/constants";
-import * as yup from "yup";
-import MultipleItemTableInput from "../../components/MultipleTableInput/MultipleItemTableInput";
+import dayjs from "dayjs";
 
-const AddArea = () => {
+const EditCustomer = () => {
+  const { id } = useParams();
   const navigate = useNavigate();
 
   const { alert, showAlert, closeAlert } = useAlert();
   const [loading, setLoading] = useState(false);
-  const [dataUser, setDataUser] = useState([]);
-  const [dataSPV, setDataSPV] = useState([]);
+  const [idCustomer, setIdCustomer] = useState([]);
+  const [kodeArea, setKodeArea] = useState([]);
   const [retry, setRetry] = useState(false);
 
   const schema = useMemo(() => {
     return yup.object().shape({
+      no_cus: yup
+        .string()
+        .required()
+        .test("id-exists", "No Customer Telah Digunakan", function (value) {
+          if (!value || !idCustomer) return false;
+          const isDuplicate = idCustomer.some((item) => item.no_cus === value);
+          return !isDuplicate;
+        }),
+      no_seri: yup.string().required(),
+      nama_cus: yup.string().required(),
+      alias: yup.string().required(),
       kode_area: yup.string().required(),
-      nama_area: yup.string().required(),
-      groups: yup.string().required(),
-      id_supervisor: yup.number().required(),
-      id_teknisi: yup.number().required(),
     });
-  }, []);
+  }, [idCustomer]);
 
   const {
     register,
@@ -61,25 +66,69 @@ const AddArea = () => {
     resolver: yupResolver(schema),
     context: { isEdit: false },
     defaultValues: {
+      no_cus: "",
+      no_seri: "",
+      nama_cus: "",
+      alias: "",
       kode_area: "",
-      nama_area: "",
-      groups: "",
-      id_supervisor: "",
-      id_teknisi: "",
     },
   });
 
   useEffect(() => {
-    const getUserData = () => {
+    const fetchCustomerById = async () => {
+      try {
+        const response = await axios.get(
+          `${import.meta.env.VITE_API_URL}api/get-customer-by-id?id=${id}`
+        );
+
+        const data = response.data[0];
+
+        Object.entries(data).forEach(([key, value]) => {
+          let parsedValue = value;
+
+          setValue(key, parsedValue, { shouldDirty: true });
+        });
+
+        getNoCus(data.no_cus);
+      } catch (err) {
+        console.error("No data found or is missing");
+        showAlert("Gagal mendapat data customer tidak ditemukan.", "error");
+      }
+    };
+
+    const getNoCus = async (no_cus) => {
       try {
         axios
-          .get(`${import.meta.env.VITE_API_URL}api/get-teknisi`)
+          .get(
+            `${
+              import.meta.env.VITE_API_URL
+            }api/get-no-customer-edit?no_cus=${no_cus}`
+          )
           .then((res) => {
-            if (res.data.length >= 0) {
-              const data = res.data;
-              setDataUser(data);
+            if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+              // Store the array of objects directly
+              setIdCustomer(res.data);
             } else {
-              showAlert("Data user teknisi belum ada.", "error");
+              setIdCustomer([]);
+            }
+          });
+      } catch (err) {
+        console.error("Terjadi kesalahan saat memanggil data customer: ", err);
+        showAlert("Terjadi kesalahan saat memanggil data customer", "error");
+      }
+    };
+
+    const getKodeArea = async () => {
+      try {
+        axios
+          .get(`${import.meta.env.VITE_API_URL}api/get-kode-area`)
+          .then((res) => {
+            if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+              // Store the array of objects directly
+              setKodeArea(res.data);
+            } else {
+              setKodeArea([]);
+              showAlert("Data user supervisor belum ada.", "error");
             }
           });
       } catch (err) {
@@ -88,53 +137,10 @@ const AddArea = () => {
       }
     };
 
-    const getSPVData = () => {
-      try {
-        axios.get(`${import.meta.env.VITE_API_URL}api/get-spv`).then((res) => {
-          if (res.data.length >= 0) {
-            const data = res.data;
-            setDataSPV(data);
-          } else {
-            showAlert("Data user supervisor belum ada.", "error");
-          }
-        });
-      } catch (err) {
-        console.error("Terjadi kesalahan saat memanggil data: ", err);
-        showAlert("Terjadi kesalahan saat memanggil data", "error");
-      }
-    };
-
-    getUserData();
-    getSPVData();
+    fetchCustomerById();
+    getNoCus();
+    getKodeArea();
   }, []);
-
-  // const checkNoSeri = async (id_kontrak, seri) => {
-  //   try {
-  //     const response = await axios.get(
-  //       `${import.meta.env.VITE_API_URL}api/get-noseri-contract`,
-  //       {
-  //         params: {
-  //           id_contract: id_kontrak,
-  //         },
-  //       }
-  //     );
-
-  //     const data = response.data;
-
-  //     const noSeriInput = seri.map((item) => item.no_seri);
-  //     const noSeriContract = data.map((item) => item.no_seri);
-
-  //     // Check if every no_seri in noSeriArray exists in targetNoSeri
-  //     const exist = noSeriInput.every((noSeri) =>
-  //       noSeriContract.includes(noSeri)
-  //     );
-
-  //     return exist;
-  //   } catch (error) {
-  //     console.error("Error for checking the no seri:", error);
-  //     showAlert("Terjadi kesalahan saat memeriksa no seri.", "error");
-  //   }
-  // };
 
   const onSubmit = async (values) => {
     setLoading(true);
@@ -143,23 +149,23 @@ const AddArea = () => {
 
       // Append all fields except special ones
       Object.entries(values).forEach(([key, value]) => {
-        console.log(key + " = " + value);
         data.append(key, value);
       });
 
       // Submit main form
       const response = await axios.post(
-        `${import.meta.env.VITE_API_URL}api/create-area`,
+        `${import.meta.env.VITE_API_URL}api/edit-customer?id=${id}`,
         data,
         { timeout: 5000 }
       );
+
       if (!response.data.ok) {
-        throw new Error("Gagal menyimpan data area.");
+        throw new Error("Gagal mengubah data customer.");
       } else {
         setRetry(false);
-        navigate("/area", {
+        navigate("/customer", {
           state: {
-            message: "Data area Berhasil Ditambahkan!",
+            message: "Data customer Berhasil Diubah!",
             severity: "success",
           },
         });
@@ -176,6 +182,7 @@ const AddArea = () => {
       setLoading(false);
     }
   };
+
   const onInvalid = (errors) => {
     showAlert(
       "Terjadi kesalahan pada input data mohon check kembali.",
@@ -190,7 +197,7 @@ const AddArea = () => {
   return (
     <Paper sx={{ padding: 3 }} elevation={4}>
       <Typography variant="h5" marginBottom={"1.5em"} gutterBottom>
-        New Area
+        Edit Customer
       </Typography>
       <LocalizationProvider dateAdapter={AdapterDayjs}>
         <form
@@ -199,104 +206,80 @@ const AddArea = () => {
         >
           <Grid container spacing={5} marginY={"2em"} alignItems="center">
             <Grid size={{ xs: 12, md: 6 }}>
-              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="kode_area">
-                Kode Area
+              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="no_cus">
+                No. Customer
               </Typography>
               <TextField
                 variant="outlined"
                 fullWidth
-                {...register("kode_area")}
-                error={!!errors.kode_area}
-                helperText={errors.kode_area?.message}
+                {...register("no_cus")}
+                error={!!errors.no_cus}
+                helperText={errors.no_cus?.message}
               />
             </Grid>
-
             <Grid size={{ xs: 12, md: 6 }}>
-              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="nama_area">
-                Nama Area
+              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="nama_cus">
+                Nama Customer
               </Typography>
               <TextField
                 variant="outlined"
                 fullWidth
-                {...register("nama_area")}
-                error={!!errors.nama_area}
-                helperText={errors.nama_area?.message}
+                {...register("nama_cus")}
+                error={!!errors.nama_cus}
+                helperText={errors.nama_cus?.message}
               />
             </Grid>
-
             <Grid size={{ xs: 12, md: 6 }}>
-              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="groups">
-                Group
+              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="alias">
+                Alias
               </Typography>
               <TextField
                 variant="outlined"
                 fullWidth
-                {...register("groups")}
-                error={!!errors.groups}
-                helperText={errors.groups?.message}
+                {...register("alias")}
+                error={!!errors.alias}
+                helperText={errors.alias?.message}
+              />
+            </Grid>
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="no_seri">
+                No. Seri
+              </Typography>
+              <TextField
+                variant="outlined"
+                fullWidth
+                {...register("no_seri")}
+                error={!!errors.no_seri}
+                helperText={errors.no_seri?.message}
               />
             </Grid>
 
-            {dataSPV && (
+            {kodeArea && (
               <Grid size={{ xs: 12, md: 6 }}>
                 <Controller
-                  name="id_supervisor"
+                  name="kode_area"
                   control={control}
-                  rules={{ required: "Supervisor is required" }} // Add your validation rules here
+                  rules={{ required: "Kode Area is required" }} // Add your validation rules here
                   render={({ field }) => (
-                    <FormControl fullWidth error={!!errors.id_supervisor}>
+                    <FormControl fullWidth error={!!errors.kode_area}>
                       <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
-                        Pilih Supervisor
+                        Pilih Kode Area
                       </Typography>
                       <Select
-                        id="supervisor-select"
+                        id="area-select"
                         variant="outlined"
                         {...field}
                         displayEmpty
                       >
-                        {dataSPV.map((item) => (
-                          <MenuItem key={item.id} value={item.id}>
-                            {item.name}
+                        {kodeArea.map((item) => (
+                          <MenuItem key={item.kode_area} value={item.kode_area}>
+                            {item.kode_area}
                           </MenuItem>
                         ))}
                       </Select>
-                      {errors.id_supervisor && (
+                      {errors.kode_area && (
                         <FormHelperText>
-                          {errors.id_supervisor?.message}
-                        </FormHelperText>
-                      )}
-                    </FormControl>
-                  )}
-                />
-              </Grid>
-            )}
-
-            {dataUser && (
-              <Grid size={{ xs: 12, md: 6 }}>
-                <Controller
-                  name="id_teknisi"
-                  control={control}
-                  rules={{ required: "Teknisi is required" }} // Add your validation rules here
-                  render={({ field }) => (
-                    <FormControl fullWidth error={!!errors.id_teknisi}>
-                      <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
-                        Pilih Teknisi
-                      </Typography>
-                      <Select
-                        id="teknisi-select"
-                        variant="outlined"
-                        {...field}
-                        displayEmpty
-                      >
-                        {dataUser.map((item) => (
-                          <MenuItem key={item.id} value={item.id}>
-                            {item.name}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                      {errors.id_teknisi && (
-                        <FormHelperText>
-                          {errors.id_teknisi?.message}
+                          {errors.kode_area?.message}
                         </FormHelperText>
                       )}
                     </FormControl>
@@ -350,4 +333,4 @@ const AddArea = () => {
   );
 };
 
-export default AddArea;
+export default EditCustomer;
