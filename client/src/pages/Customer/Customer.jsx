@@ -30,7 +30,6 @@ const Customer = () => {
     { field: "no_cus", headerName: "No. Customer", flex: 1 },
     { field: "nama_cus", headerName: "Nama Customer", flex: 1 },
     { field: "alias", headerName: "Alias Customer", flex: 1 },
-    { field: "no_seri", headerName: "No. Seri", flex: 1 },
     {
       field: "actions",
       headerName: "Actions",
@@ -80,7 +79,7 @@ const Customer = () => {
   return (
     <Container>
       <Typography variant="h4" gutterBottom>
-        Master Customer
+        Master Customer VTK
       </Typography>
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Box sx={{ minWidth: 700 }}>

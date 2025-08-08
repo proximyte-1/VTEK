@@ -37,10 +37,10 @@ const menu_flk = [
 const menu_master = [
   { name: "User", endpoint: "/users" },
   { name: "Kontrak", endpoint: "/contract" },
-  { name: "Instalasi", endpoint: "/instalasi" },
   { name: "Area", endpoint: "/area" },
   { name: "Customer", endpoint: "/customer" },
-  { name: "Global Settings", endpoint: "/settings" },
+  // { name: "Instalasi", endpoint: "/instalasi" },
+  // { name: "Global Settings", endpoint: "/settings" },
 ];
 
 const menu_report = [

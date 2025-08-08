@@ -47,10 +47,12 @@ import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import * as yup from "yup";
 import axios from "axios";
+import { useAuth } from "../../../utils/auth";
 
 const AddNoNav = () => {
   const navigate = useNavigate();
 
+  const { user } = useAuth();
   const { alert, showAlert, closeAlert } = useAlert();
   const [barang, setDataBarang] = useState([]);
   const [customer, setDataCustomer] = useState([]);
@@ -61,6 +63,7 @@ const AddNoNav = () => {
   const [contract, setContract] = useState([]);
   const [instalasi, setInstalasi] = useState([]);
   const [area, setArea] = useState([]);
+  const [teknisi, setTeknisi] = useState([]);
   const [expand, setExpand] = useState(true);
   const [retry, setRetry] = useState(false);
 
@@ -152,6 +155,7 @@ const AddNoNav = () => {
             ),
         otherwise: (schema) => schema.nullable().notRequired(),
       }),
+      id_teknisi: yup.number().required(),
     });
   }, [lastService]);
 
@@ -187,6 +191,7 @@ const AddNoNav = () => {
       saran: "",
       status_res: "",
       no_fd: "",
+      id_teknisi: "",
       rep_ke: 0,
       pic: null,
     },
@@ -318,7 +323,8 @@ const AddNoNav = () => {
         return;
       }
 
-      setArea(data[0]);
+      setArea(data);
+      setTeknisi(data.teknisi);
     } catch (error) {
       console.error("Error fetching data area:", error);
       showAlert("Gagal mengambil data area", "error");
@@ -451,8 +457,6 @@ const AddNoNav = () => {
     try {
       const data = new FormData();
 
-      // Always append the file
-      data.append("created_by", 1);
       data.append("type", 1);
 
       // Append all fields except special ones
@@ -470,6 +474,11 @@ const AddNoNav = () => {
           data.append(key, value);
         }
       });
+
+      data.append("created_by", user?.id_user || "0");
+      // if (user) {
+      //   data.append("created_by", user?.id_user || "0");
+      // }
 
       // Submit main form
       const response = await axios.post(
@@ -747,6 +756,36 @@ const AddNoNav = () => {
                           helperText={errors.no_fd?.message}
                         />
                       </Grid>
+
+                      <Grid size={{ xs: 12, md: 6 }}>
+                        <FormControl fullWidth required>
+                          <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
+                            Pilih Teknisi
+                          </Typography>
+                          <Controller
+                            name="id_teknisi"
+                            control={control}
+                            render={({ field }) => (
+                              <Select
+                                {...field}
+                                variant="outlined"
+                                displayEmpty
+                              >
+                                <MenuItem disabled value="">
+                                  <em>Pilih Teknisi</em>
+                                </MenuItem>
+                                {Object.entries(teknisi).map(
+                                  ([value, { name, id }]) => (
+                                    <MenuItem key={value} value={id}>
+                                      {name}
+                                    </MenuItem>
+                                  )
+                                )}
+                              </Select>
+                            )}
+                          />
+                        </FormControl>
+                      </Grid>
                     </Grid>
                   </AccordionDetails>
                 </Accordion>
@@ -918,7 +957,11 @@ const AddNoNav = () => {
                             name="status_call"
                             control={control}
                             render={({ field }) => (
-                              <Select {...field} variant="outlined">
+                              <Select
+                                {...field}
+                                variant="outlined"
+                                displayEmpty
+                              >
                                 <MenuItem disabled value="">
                                   <em>Pilih Kategori Status Call</em>
                                 </MenuItem>
@@ -961,7 +1004,11 @@ const AddNoNav = () => {
                             control={control}
                             variant="outlined"
                             render={({ field }) => (
-                              <Select {...field}>
+                              <Select
+                                {...field}
+                                variant="outlined"
+                                displayEmpty
+                              >
                                 <MenuItem disabled value="">
                                   <em>Pilih Kategori Keluhan</em>
                                 </MenuItem>
@@ -1027,7 +1074,11 @@ const AddNoNav = () => {
                             control={control}
                             variant="outlined"
                             render={({ field }) => (
-                              <Select {...field}>
+                              <Select
+                                {...field}
+                                variant="outlined"
+                                displayEmpty
+                              >
                                 <MenuItem disabled value="">
                                   <em>Pilih Kategori Problem</em>
                                 </MenuItem>
@@ -1224,7 +1275,11 @@ const AddNoNav = () => {
                             name="status_res"
                             control={control}
                             render={({ field }) => (
-                              <Select {...field} variant="outlined">
+                              <Select
+                                {...field}
+                                variant="outlined"
+                                displayEmpty
+                              >
                                 <MenuItem disabled value="">
                                   <em>Pilih Status Result</em>
                                 </MenuItem>

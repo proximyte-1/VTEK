@@ -15,6 +15,7 @@ import {
   MenuItem,
   FormControl,
   FormHelperText,
+  Autocomplete,
 } from "@mui/material";
 import { schemaUsers, handleFileSelect } from "../../utils/helpers";
 import { useAlert } from "../../utils/alert";
@@ -45,17 +46,11 @@ const EditUsers = () => {
       name: "",
       email: "",
       role: "",
-      type: "",
     },
   });
 
-  // const handleFileSelect = (file) => {
-  //   setValue("pic", file, { shouldValidate: true });
-  // };
-
   const { alert, showAlert, closeAlert } = useAlert();
   const [loading, setLoading] = useState(false);
-  const [dataArea, setDataArea] = useState("");
 
   useEffect(() => {
     async function fetchDataUser() {
@@ -66,29 +61,18 @@ const EditUsers = () => {
 
         const data = response.data[0];
         Object.entries(data).forEach(([key, value]) => {
-          setValue(key, value, { shouldDirty: true });
+          if (key === "role") {
+            setValue(key, JSON.parse(value), { shouldDirty: true });
+          } else {
+            setValue(key, value, { shouldDirty: true });
+          }
         });
       } catch (error) {
         console.error("Error fetching Data User:", error);
       }
     }
 
-    const fetchKodeArea = async () => {
-      try {
-        axios.get(`${import.meta.env.VITE_API_URL}api/get-area`).then((res) => {
-          if (res.data.length > 0) {
-            const data = res.data;
-            setDataArea(data);
-          }
-        });
-      } catch (err) {
-        console.error("Terjadi kesalahan saat memanggil data: ", err);
-        showAlert("Terjadi kesalahan saat memanggil data", "error");
-      }
-    };
-
     fetchDataUser();
-    fetchKodeArea();
   }, []);
 
   const onSubmit = async (values) => {
@@ -98,7 +82,11 @@ const EditUsers = () => {
 
       // Append all fields except special ones
       Object.entries(values).forEach(([key, value]) => {
-        data.append(key, value);
+        if (key === "role") {
+          data.append(key, JSON.stringify(value));
+        } else {
+          data.append(key, value);
+        }
       });
 
       // Submit main form
@@ -170,77 +158,51 @@ const EditUsers = () => {
               helperText={errors.email?.message}
             />
           </Grid>
-          {dataArea && (
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Controller
-                name="kode_area"
-                control={control}
-                render={({ field }) => (
-                  <FormControl fullWidth error={!!errors.kode_area}>
-                    <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
-                      Pilih Kode Area
-                    </Typography>
-                    <Select
-                      id="supervisor-select"
-                      variant="outlined"
-                      {...field}
-                      displayEmpty
-                    >
-                      {dataArea.map((item) => (
-                        <MenuItem key={item.id} value={item.id}>
-                          {item.name}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                    {errors.kode_area && (
-                      <FormHelperText>
-                        {errors.kode_area?.message}
-                      </FormHelperText>
-                    )}
-                  </FormControl>
-                )}
-              />
-            </Grid>
-          )}
           <Grid size={{ xs: 12, md: 6 }}>
-            <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="role">
-              Role
-            </Typography>
             <Controller
               name="role"
               control={control}
-              render={({ field }) => (
-                <Select {...field} variant="outlined" fullWidth>
-                  <MenuItem disabled value="">
-                    <em>Pilih Role</em>
-                  </MenuItem>
-                  {Object.entries(selectRole).map(([value, label]) => (
-                    <MenuItem key={value} value={value}>
-                      {label}
-                    </MenuItem>
-                  ))}
-                </Select>
-              )}
-            />
-          </Grid>
-          <Grid size={{ xs: 12, md: 6 }}>
-            <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="type">
-              Type
-            </Typography>
-            <Controller
-              name="type"
-              control={control}
-              render={({ field }) => (
-                <Select {...field} variant="outlined" fullWidth>
-                  <MenuItem disabled value="">
-                    <em>Pilih Type</em>
-                  </MenuItem>
-                  {Object.entries(selectType).map(([value, label]) => (
-                    <MenuItem key={value} value={value}>
-                      {label}
-                    </MenuItem>
-                  ))}
-                </Select>
+              rules={{ required: "Role is required" }}
+              render={({ field, fieldState: { error } }) => (
+                <>
+                  <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
+                    Role
+                  </Typography>
+                  <Autocomplete
+                    {...field}
+                    multiple
+                    id="role-autocomplete"
+                    options={Object.entries(selectType).map(([id, name]) => ({
+                      id: Number(id),
+                      name: name,
+                    }))}
+                    getOptionLabel={(option) => option.name || ""}
+                    isOptionEqualToValue={(option, value) =>
+                      option.id === value.id
+                    }
+                    onChange={(event, newValue) => {
+                      // Pass an array of IDs to the form state
+                      field.onChange(newValue.map((option) => option.id));
+                    }}
+                    // The value prop must be an array of objects
+                    value={
+                      Object.entries(selectType)
+                        .map(([id, name]) => ({ id: Number(id), name: name }))
+                        .filter((option) => field.value?.includes(option.id)) ||
+                      []
+                    }
+                    filterSelectedOptions
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        variant="outlined"
+                        fullWidth
+                        error={!!error}
+                        helperText={error ? error.message : null}
+                      />
+                    )}
+                  />
+                </>
               )}
             />
           </Grid>

@@ -14,6 +14,9 @@ import {
   Select,
   MenuItem,
   FormControl,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from "@mui/material";
 import { useAlert } from "../../utils/alert";
 import { useNavigate, useParams } from "react-router-dom";
@@ -25,6 +28,8 @@ import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { maxDateTime, minDateTime, selectService } from "../../utils/constants";
 import dayjs from "dayjs";
+import { ExpandMoreRounded } from "@mui/icons-material";
+import { displayValue } from "../../utils/helpers";
 
 const EditCustomer = () => {
   const { id } = useParams();
@@ -33,7 +38,10 @@ const EditCustomer = () => {
   const { alert, showAlert, closeAlert } = useAlert();
   const [loading, setLoading] = useState(false);
   const [idCustomer, setIdCustomer] = useState([]);
+  const [dataCustomer, setDataCustomer] = useState([]);
   const [kodeArea, setKodeArea] = useState([]);
+  const [searched, setSearched] = useState(false);
+  const [expand, setExpand] = useState(true);
   const [retry, setRetry] = useState(false);
 
   const schema = useMemo(() => {
@@ -46,8 +54,6 @@ const EditCustomer = () => {
           const isDuplicate = idCustomer.some((item) => item.no_cus === value);
           return !isDuplicate;
         }),
-      no_seri: yup.string().required(),
-      nama_cus: yup.string().required(),
       alias: yup.string().required(),
       kode_area: yup.string().required(),
     });
@@ -67,8 +73,6 @@ const EditCustomer = () => {
     context: { isEdit: false },
     defaultValues: {
       no_cus: "",
-      no_seri: "",
-      nama_cus: "",
       alias: "",
       kode_area: "",
     },
@@ -89,10 +93,29 @@ const EditCustomer = () => {
           setValue(key, parsedValue, { shouldDirty: true });
         });
 
-        getNoCus(data.no_cus);
+        await getCustomerData(data.no_cus);
+        await getNoCus(data.no_cus);
+        setExpand(false);
       } catch (err) {
         console.error("No data found or is missing");
         showAlert("Gagal mendapat data customer tidak ditemukan.", "error");
+      }
+    };
+
+    const getCustomerData = async (no_cus) => {
+      try {
+        const fetch_customer = await axios.get(
+          import.meta.env.VITE_API_URL + `api/nav-by-no-cus?no_cus=${no_cus}`
+        );
+        const data = fetch_customer.data;
+
+        const customerData = data.data[0];
+        setDataCustomer(customerData);
+
+        return customerData;
+      } catch (error) {
+        console.error("Error fetching customer:", error);
+        showAlert("Gagal mengambil data dari server", "error");
       }
     };
 
@@ -138,7 +161,6 @@ const EditCustomer = () => {
     };
 
     fetchCustomerById();
-    getNoCus();
     getKodeArea();
   }, []);
 
@@ -195,9 +217,9 @@ const EditCustomer = () => {
   const isSmallScreen = useMediaQuery(theme.breakpoints.down("sm"));
 
   return (
-    <Paper sx={{ padding: 3 }} elevation={4}>
+    <Paper sx={{ padding: 3, marginBottom: 5 }} elevation={4}>
       <Typography variant="h5" marginBottom={"1.5em"} gutterBottom>
-        Edit Customer
+        Edit Pendaftaran Customer VTK
       </Typography>
       <LocalizationProvider dateAdapter={AdapterDayjs}>
         <form
@@ -205,88 +227,120 @@ const EditCustomer = () => {
           encType="multipart/form-data"
         >
           <Grid container spacing={5} marginY={"2em"} alignItems="center">
+            {/* Input Report */}
             <Grid size={{ xs: 12, md: 6 }}>
-              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="no_cus">
-                No. Customer
-              </Typography>
               <TextField
+                label="No. Customer"
                 variant="outlined"
                 fullWidth
                 {...register("no_cus")}
+                disabled
                 error={!!errors.no_cus}
                 helperText={errors.no_cus?.message}
               />
             </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="nama_cus">
-                Nama Customer
-              </Typography>
-              <TextField
-                variant="outlined"
-                fullWidth
-                {...register("nama_cus")}
-                error={!!errors.nama_cus}
-                helperText={errors.nama_cus?.message}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="alias">
-                Alias
-              </Typography>
-              <TextField
-                variant="outlined"
-                fullWidth
-                {...register("alias")}
-                error={!!errors.alias}
-                helperText={errors.alias?.message}
-              />
-            </Grid>
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="no_seri">
-                No. Seri
-              </Typography>
-              <TextField
-                variant="outlined"
-                fullWidth
-                {...register("no_seri")}
-                error={!!errors.no_seri}
-                helperText={errors.no_seri?.message}
-              />
-            </Grid>
-
-            {kodeArea && (
-              <Grid size={{ xs: 12, md: 6 }}>
-                <Controller
-                  name="kode_area"
-                  control={control}
-                  rules={{ required: "Kode Area is required" }} // Add your validation rules here
-                  render={({ field }) => (
-                    <FormControl fullWidth error={!!errors.kode_area}>
-                      <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
-                        Pilih Kode Area
-                      </Typography>
-                      <Select
-                        id="area-select"
-                        variant="outlined"
-                        {...field}
-                        displayEmpty
-                      >
-                        {kodeArea.map((item) => (
-                          <MenuItem key={item.kode_area} value={item.kode_area}>
-                            {item.kode_area}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                      {errors.kode_area && (
-                        <FormHelperText>
-                          {errors.kode_area?.message}
-                        </FormHelperText>
-                      )}
-                    </FormControl>
-                  )}
-                />
+            <Grid container spacing={5} size={12}>
+              {/* Accordion 1 - Non Input */}
+              <Grid size={12}>
+                <Accordion disabled={!getValues("no_cus")} expanded={!expand}>
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreRounded />}
+                    aria-controls="panel1-content"
+                    id="panel1-header"
+                  >
+                    <Typography component="span" variant="h5">
+                      Detail Customer
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Grid container spacing={5}>
+                      {/* Row 1 */}
+                      <Grid size={{ xs: 12, md: 12 }}>
+                        <Typography>
+                          Nama Customer :{" "}
+                          {displayValue(
+                            dataCustomer?.["d:Sell_to_Customer_Name"]
+                          )}
+                        </Typography>
+                        <Typography>
+                          Alamat :{" "}
+                          {displayValue(dataCustomer?.["d:Sell_to_Address"])}
+                        </Typography>
+                      </Grid>
+                    </Grid>
+                  </AccordionDetails>
+                </Accordion>
               </Grid>
-            )}
+              {/* Accordion 2 - Input  */}
+              <Grid size={12}>
+                <Accordion expanded={!expand} disabled={!getValues("no_cus")}>
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreRounded />}
+                    aria-controls="panel1-content"
+                    id="panel1-header"
+                  >
+                    <Typography component="span" variant="h5">
+                      Data
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    <Grid container spacing={5}>
+                      <Grid size={{ xs: 12, md: 6 }}>
+                        <Typography
+                          sx={{ color: "rgba(0, 0, 0, 0.6)" }}
+                          id="alias"
+                        >
+                          Alias
+                        </Typography>
+                        <TextField
+                          variant="outlined"
+                          fullWidth
+                          {...register("alias")}
+                          error={!!errors.alias}
+                          helperText={errors.alias?.message}
+                        />
+                      </Grid>
+
+                      {kodeArea && (
+                        <Grid size={{ xs: 12, md: 6 }}>
+                          <Controller
+                            name="kode_area"
+                            control={control}
+                            rules={{ required: "Kode Area is required" }} // Add your validation rules here
+                            render={({ field }) => (
+                              <FormControl fullWidth error={!!errors.kode_area}>
+                                <Typography
+                                  sx={{ color: "rgba(0, 0, 0, 0.6)" }}
+                                >
+                                  Pilih Kode Area
+                                </Typography>
+                                <Select
+                                  id="area-select"
+                                  variant="outlined"
+                                  {...field}
+                                  displayEmpty
+                                >
+                                  {kodeArea.map((item) => (
+                                    <MenuItem key={item.id} value={item.id}>
+                                      {item.groups + " - " + item.kode_area}
+                                    </MenuItem>
+                                  ))}
+                                </Select>
+                                {errors.kode_area && (
+                                  <FormHelperText>
+                                    {errors.kode_area?.message}
+                                  </FormHelperText>
+                                )}
+                              </FormControl>
+                            )}
+                          />
+                        </Grid>
+                      )}
+                    </Grid>
+                  </AccordionDetails>
+                </Accordion>
+              </Grid>
+            </Grid>
           </Grid>
 
           {/* Alert notifications */}

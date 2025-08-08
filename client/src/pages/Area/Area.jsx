@@ -27,9 +27,8 @@ const Area = () => {
         return params.api.getAllRowIds().indexOf(params.id) + 1;
       },
     },
-    { field: "kode_area", headerName: "Kode Area", flex: 1 },
-    { field: "groups", headerName: "Group", flex: 1 },
-    { field: "nama_area", headerName: "Nama Area", flex: 1 },
+    { field: "groups", headerName: "Group Name", flex: 1 },
+    { field: "count", headerName: "Banyak Kode Area", flex: 1 },
     {
       field: "actions",
       headerName: "Actions",
@@ -43,7 +42,7 @@ const Area = () => {
             variant="contained"
             color="warning"
             sx={{ marginRight: 0.5 }}
-            onClick={() => navigate(`edit/${params.row.id}`)}
+            onClick={() => navigate(`edit/${params.row.groups}`)}
           >
             Edit
           </Button>
@@ -63,7 +62,13 @@ const Area = () => {
           import.meta.env.VITE_API_URL + `api/get-area`
         );
 
-        setDatas(response.data);
+        // Map over the data to add a unique 'id' to each row
+        const dataWithIds = response.data.map((item, index) => ({
+          ...item, // Keep all other properties
+          id: index, // Add a unique 'id' using the index
+        }));
+
+        setDatas(dataWithIds);
       } catch (error) {
         console.error("Error fetching area:", error);
       }

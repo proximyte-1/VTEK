@@ -50,11 +50,13 @@ import {
   selectStatusResult,
 } from "../../../utils/constants";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
+import { useAuth } from "../../../utils/auth";
 
 const EditNoNav = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
+  const { user } = useAuth();
   const [barang, setDataBarang] = useState([]);
   const [customer, setDataCustomer] = useState([]);
   const [searched, setSearched] = useState(true);
@@ -64,6 +66,7 @@ const EditNoNav = () => {
   const [contract, setContract] = useState([]);
   const [instalasi, setInstalasi] = useState([]);
   const [area, setArea] = useState([]);
+  const [teknisi, setTeknisi] = useState([]);
   const { alert, showAlert, closeAlert } = useAlert();
   const [retry, setRetry] = useState(false);
 
@@ -93,10 +96,12 @@ const EditNoNav = () => {
         .required()
         .test(
           "not-less-than-previous-bw",
-          `Tidak boleh kurang dari data sebelumnya (${lastService.count_bw}).`,
+          `Tidak boleh kurang dari data sebelumnya (${
+            lastService?.count_bw || 0
+          }).`,
           function (value) {
-            const { count_bw } = lastService;
-            const n_count = Number(count_bw);
+            const { count_bw } = lastService || {};
+            const n_count = Number(count_bw) || 0;
             const n_val = Number(value);
 
             if (n_val === undefined || n_val === null) return false;
@@ -108,10 +113,12 @@ const EditNoNav = () => {
         .required()
         .test(
           "not-less-than-previous-cl",
-          `Tidak boleh kurang dari data sebelumnya (${lastService.count_cl}).`,
+          `Tidak boleh kurang dari data sebelumnya (${
+            lastService?.count_cl || 0
+          }).`,
           function (value) {
-            const { count_cl } = lastService;
-            const n_count = Number(count_cl);
+            const { count_cl } = lastService || {};
+            const n_count = Number(count_cl) || 0;
             const n_val = Number(value);
 
             if (n_val === undefined || n_val === null) return false;
@@ -151,6 +158,7 @@ const EditNoNav = () => {
             ),
         otherwise: (schema) => schema.nullable().notRequired(),
       }),
+      id_teknisi: yup.number().required(),
     });
   }, [lastService]);
 
@@ -186,6 +194,7 @@ const EditNoNav = () => {
       saran: "",
       status_res: "",
       no_fd: "",
+      id_teknisi: "",
       rep_ke: 0,
       pic: null,
     },
@@ -224,24 +233,19 @@ const EditNoNav = () => {
           });
 
           // Fetch related data
-          const customer = await fetchDataBarang(datas.no_rep);
+          const customer = await fetchDataBarang(datas?.no_rep);
           if (customer) {
             const dataLastService = await fetchLastService(
-              displayValue(customer["d:Serial_No"])
+              displayValue(datas?.no_seri)
             );
 
             const dataContract = await fetchDataContract(
-              displayValue(customer["d:Sell_to_Customer_No"])
+              displayValue(datas?.no_cus)
             );
 
-            const dataArea = await fetchDataArea(
-              displayValue(customer["d:Sell_to_Customer_No"])
-            );
+            const dataArea = await fetchDataArea(displayValue(datas?.no_cus));
 
-            await fetchContRes(
-              customer["d:Sell_to_Customer_No"],
-              customer["d:Serial_No"]
-            );
+            await fetchContRes(datas?.no_cus, datas?.no_seri);
           }
           setExpand(false);
         } else {
@@ -274,11 +278,7 @@ const EditNoNav = () => {
       const data = response.data;
 
       if (data.length <= 0) {
-        setLastService({
-          count_bw: 0,
-          count_cl: 0,
-          waktu_selesai: null,
-        });
+        setLastService(null);
         return;
       }
 
@@ -307,7 +307,8 @@ const EditNoNav = () => {
         return;
       }
 
-      setArea(data[0]);
+      setArea(data);
+      setTeknisi(data.teknisi);
     } catch (error) {
       console.error("Error fetching data area:", error);
       showAlert("Gagal mengambil data area", "error");
@@ -408,11 +409,6 @@ const EditNoNav = () => {
     try {
       const data = new FormData();
 
-      // Always append the file
-      // data.append("pic", getValues("pic"));
-      data.append("created_by", 1);
-      data.append("type", 1);
-
       // Append all fields except special ones
       Object.entries(values).forEach(([key, value]) => {
         if (
@@ -428,7 +424,6 @@ const EditNoNav = () => {
           data.append(key, value);
         }
       });
-
       // Submit main form
       const response = await axios.post(
         `${import.meta.env.VITE_API_URL}api/edit-flk?${id}`,
@@ -461,7 +456,7 @@ const EditNoNav = () => {
 
   const onInvalid = (errors) => {
     showAlert(
-      "Terjadi kesalahan pada input data mohon check kembali.",
+      `Terjadi kesalahan pada input data mohon check kembali.`,
       "error"
     );
   };
@@ -545,11 +540,19 @@ const EditNoNav = () => {
                       {/* Row 2 */}
                       <Grid size={{ xs: 12, md: 6 }}>
                         <Grid>
-                          <Typography>Kode Area :</Typography>
-                          <Typography>Group :</Typography>
+                          <Typography>
+                            Kode Area : {displayValue(area?.kode_area)}
+                          </Typography>
+                          <Typography>
+                            Group : {displayValue(area?.groups)}
+                          </Typography>
                         </Grid>
-                        <Typography>Supervisor :</Typography>
-                        <Typography>Teknisi :</Typography>
+                        <Typography>
+                          Supervisor : {displayValue(area?.nama_spv)}
+                        </Typography>
+                        <Typography>
+                          Teknisi : {displayValue(area?.nama_teknisi)}
+                        </Typography>
                         <Typography>C.S.O :</Typography>
                       </Grid>
                     </Grid>
@@ -665,6 +668,36 @@ const EditNoNav = () => {
                           error={!!errors.no_fd}
                           helperText={errors.no_fd?.message}
                         />
+                      </Grid>
+
+                      <Grid size={{ xs: 12, md: 6 }}>
+                        <FormControl fullWidth required>
+                          <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
+                            Pilih Teknisi
+                          </Typography>
+                          <Controller
+                            name="id_teknisi"
+                            control={control}
+                            render={({ field }) => (
+                              <Select
+                                {...field}
+                                variant="outlined"
+                                displayEmpty
+                              >
+                                <MenuItem disabled value="">
+                                  <em>Pilih Teknisi</em>
+                                </MenuItem>
+                                {Object.entries(teknisi).map(
+                                  ([value, { name, id }]) => (
+                                    <MenuItem key={value} value={id}>
+                                      {name}
+                                    </MenuItem>
+                                  )
+                                )}
+                              </Select>
+                            )}
+                          />
+                        </FormControl>
                       </Grid>
                     </Grid>
                   </AccordionDetails>
@@ -801,7 +834,11 @@ const EditNoNav = () => {
                             name="status_call"
                             control={control}
                             render={({ field }) => (
-                              <Select {...field} variant="outlined">
+                              <Select
+                                {...field}
+                                variant="outlined"
+                                displayEmpty
+                              >
                                 <MenuItem disabled value="">
                                   <em>Pilih Kategori Status Call</em>
                                 </MenuItem>
@@ -844,7 +881,11 @@ const EditNoNav = () => {
                             control={control}
                             variant="outlined"
                             render={({ field }) => (
-                              <Select {...field}>
+                              <Select
+                                {...field}
+                                variant="outlined"
+                                displayEmpty
+                              >
                                 <MenuItem disabled value="">
                                   <em>Pilih Kategori Keluhan</em>
                                 </MenuItem>
@@ -910,7 +951,11 @@ const EditNoNav = () => {
                             control={control}
                             variant="outlined"
                             render={({ field }) => (
-                              <Select {...field}>
+                              <Select
+                                {...field}
+                                variant="outlined"
+                                displayEmpty
+                              >
                                 <MenuItem disabled value="">
                                   <em>Pilih Kategori Problem</em>
                                 </MenuItem>
@@ -1082,7 +1127,11 @@ const EditNoNav = () => {
                             name="status_res"
                             control={control}
                             render={({ field }) => (
-                              <Select {...field} variant="outlined">
+                              <Select
+                                {...field}
+                                variant="outlined"
+                                displayEmpty
+                              >
                                 <MenuItem disabled value="">
                                   <em>Pilih Status Result</em>
                                 </MenuItem>

@@ -12,7 +12,7 @@ export default function Layout() {
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated && location.pathname !== "/login") {
-      navigate("/login");
+      // navigate("/login");
     }
   }, [isAuthenticated, isLoading, navigate, location.pathname]); // Dependencies for useEffect
 

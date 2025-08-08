@@ -46,8 +46,13 @@ export const selectRole = {
 };
 
 export const selectType = {
-  1: "Admin",
-  2: "Bukan Admin",
+  1: "User Admin",
+  2: "Global Admin",
+  3: "Area Data Entry",
+  4: "Global Data Entry",
+  5: "Area Viewer",
+  6: "Global Viewer",
+  7: "Staff Teknisi",
 };
 
 // Set limits from env variables

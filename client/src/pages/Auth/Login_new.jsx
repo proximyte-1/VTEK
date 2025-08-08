@@ -6,12 +6,15 @@ import {
   Button,
   Avatar,
   Paper,
+  Alert,
+  Snackbar,
 } from "@mui/material";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
 import logo from "../../assets/logo_login.png";
 import GoogleIcon from "@mui/icons-material/Google"; // For the Google icon
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../utils/auth";
+import { useAlert } from "../../utils/alert";
 
 // Define a custom theme for Material-UI to ensure consistent styling
 const theme = createTheme({
@@ -81,9 +84,10 @@ const theme = createTheme({
 // LoginPage component
 function LoginPage() {
   // Destructure authentication state and functions from the context
-  const { isAuthenticated, login, isLoading } = useAuth();
+  const { isAuthenticated, isRegisted, login, isLoading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { alert, showAlert, closeAlert } = useAlert();
 
   useEffect(() => {
     // If not loading (auth check complete) and user is authenticated, redirect.
@@ -91,7 +95,12 @@ function LoginPage() {
       console.log("Login Page: Already authenticated, redirecting to home.");
       navigate("/"); // Redirect to home page or dashboard
     }
-  }, [isAuthenticated, isLoading, navigate]); // Dependencies
+
+    if (isRegisted === false) {
+      console.log("msk isregis");
+      showAlert("User Belum Terdaftar, Silahkan Hubungi Admin!!", "error");
+    }
+  }, [isAuthenticated, isLoading, navigate, isRegisted]); // Dependencies
 
   // Handler for the Google Login button click.
   const handleGoogleLogin = () => {
@@ -153,6 +162,23 @@ function LoginPage() {
             Don't have an account? Call Admin To Register
           </Typography>
         </Box>
+        {/* Alert notifications */}
+        <Snackbar
+          open={alert.open}
+          autoHideDuration={5000}
+          onClose={closeAlert}
+          anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+        >
+          <Alert
+            onClose={closeAlert}
+            variant="filled"
+            severity={alert.severity}
+            fontSize="inherit"
+            sx={{ width: "100%" }}
+          >
+            {alert.message}
+          </Alert>
+        </Snackbar>
       </Container>
     </ThemeProvider>
   );

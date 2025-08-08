@@ -90,9 +90,7 @@ export const schemaNoRep = yup.object().shape({
 export const schemaUsers = yup.object().shape({
   name: yup.string().required(),
   email: yup.string().required(),
-  kode_area: yup.string(),
-  role: yup.number().required(),
-  type: yup.number().required(),
+  role: yup.array().required(),
 });
 
 export const displayValue = (data) => {

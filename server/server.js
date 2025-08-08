@@ -315,11 +315,11 @@ app.get("/api/get-flk-norep", async (req, res) => {
 });
 
 app.get("/api/get-rep-seri-by-cus", async (req, res) => {
-  const { id_cus = "", no_seri = "", id = "" } = req.query;
+  const { id_cus = "", value = "" } = req.query;
   try {
     const query = `
       SELECT TOP 1 status_res, rep_ke FROM dbo.${process.env.TABLE_LK}
-      WHERE no_cus = '${id_cus}' AND no_seri = '${no_seri}' AND id != '${id}'
+      WHERE no_cus = '${id_cus}' AND no_seri = '${value}'
       ORDER BY id DESC
     `;
     const result = await pool.query(query);
@@ -373,7 +373,7 @@ app.get("/api/get-last-service", async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT TOP 1 waktu_selesai, count_bw, count_cl FROM dbo.${process.env.TABLE_LK} WHERE no_seri = '${no_seri}' ORDER BY waktu_selesai DESC`
+      `SELECT TOP 1 waktu_selesai, count_bw, count_cl FROM dbo.${process.env.TABLE_LK} WHERE no_seri = '${no_seri}' ORDER BY id DESC`
     );
     res.json(result.recordset);
   } catch (err) {
@@ -410,14 +410,49 @@ app.get("/api/get-instalasi-lk", async (req, res) => {
 
 app.get("/api/get-area-lk", async (req, res) => {
   const { no_cus } = req.query;
+
   try {
     const result = await pool.query(
-      `SELECT area.kode_area , area.groups, teknisi.name as nama_teknisi, spv.name as nama_spv from dbo.${process.env.TABLE_CUSTOMER} as cus join dbo.${process.env.TABLE_AREA} as area 
-on cus.kode_area = area.kode_area join dbo.${process.env.TABLE_USER} as teknisi on teknisi.id = area.id_teknisi
-join dbo.${process.env.TABLE_USER} as spv on spv.id = area.id_supervisor where cus.no_cus = '${no_cus}'`
+      `SELECT area.id_teknisi, cus.no_cus, area.id, area.kode_area, area.groups, area.id_supervisor 
+      FROM dbo.${process.env.TABLE_AREA} AS area 
+JOIN dbo.${process.env.TABLE_CUSTOMER} AS cus ON area.id = cus.kode_area 
+WHERE cus.no_cus = '${no_cus}'`
     );
 
-    res.json(result.recordset);
+    const data_id_teknisi = JSON.parse(result.recordset[0].id_teknisi);
+    const data_id_spv = JSON.parse(result.recordset[0].id_supervisor);
+
+    const resultTeknisi = `(${data_id_teknisi
+      .map((item) => `'${item}'`)
+      .join(",")})`;
+
+    const fetchTeknisi = await pool.query(
+      `SELECT name, id FROM dbo.${process.env.TABLE_USER} WHERE id IN${resultTeknisi}`
+    );
+
+    const resultSPV = `(${data_id_spv.map((item) => `'${item}'`).join(",")})`;
+
+    const fetchSpv = await pool.query(
+      `SELECT name, id FROM dbo.${process.env.TABLE_USER} WHERE id IN${resultSPV}`
+    );
+
+    const data_teknisi = fetchTeknisi.recordset;
+    const data_spv = fetchSpv.recordset;
+
+    const nama_teknisi = `${data_teknisi
+      .map((item) => `${item.name}`)
+      .join(", ")}`;
+
+    const nama_spv = `${data_spv.map((item) => `${item.name}`).join(", ")}`;
+
+    res.json({
+      kode_area: result.recordset[0].kode_area,
+      groups: result.recordset[0].groups,
+      nama_teknisi: nama_teknisi,
+      nama_spv: nama_spv,
+      teknisi: data_teknisi,
+      spv: data_spv,
+    });
   } catch (err) {
     res.status(500).json({ error: "Database error" });
   }
@@ -517,6 +552,7 @@ app.post("/api/create-flk", upload.single("pic"), async (req, res) => {
     const rep_ke = toNullableInt(fields.rep_ke);
     const count_bw = toNullableInt(fields.count_bw);
     const count_cl = toNullableInt(fields.count_cl);
+    const id_teknisi = toNullableInt(fields.id_teknisi);
 
     const call = formatDateForSQL(waktu_call);
     const dtg = formatDateForSQL(waktu_dtg);
@@ -528,13 +564,15 @@ app.post("/api/create-flk", upload.single("pic"), async (req, res) => {
         no_rep, no_cus, no_call, pelapor, waktu_call, waktu_dtg, status_call,
         keluhan, kat_keluhan, problem, kat_problem, solusi, waktu_mulai,
         waktu_selesai, count_bw, count_cl, saran, status_res, rep_ke, no_seri,
-        type, created_by, pic, no_lap, no_fd
+        type, created_by, pic, no_lap, no_fd, id_teknisi
       ) OUTPUT INSERTED.id VALUES (
-        '${no_rep}', '${no_cus}', '${no_call}', '${pelapor}', '${call}', '${dtg}',
+        '${
+          no_rep || null
+        }', '${no_cus}', '${no_call}', '${pelapor}', '${call}', '${dtg}',
         '${status_call}', '${keluhan}', '${kat_keluhan}', '${problem}', '${kat_problem}',
         '${solusi}', '${mulai}', '${selesai}', '${count_bw}', '${count_cl}',
         '${saran}', '${status_res}', ${rep_ke}, '${no_seri}', '${type}',
-        '${created_by}', '${filePath}', '${no_lap}', '${no_fd}'
+        '${created_by}', '${filePath}', '${no_lap}', '${no_fd}', '${id_teknisi}'
       )
     `;
 
@@ -628,10 +666,9 @@ app.post("/api/edit-flk", upload.single("pic"), async (req, res) => {
   const { id } = req.query;
   const fields = req.body;
   const file = req.file;
-  if (!file)
-    return res.status(400).json({ ok: false, message: "File is required" });
 
-  const filePath = path.join(uploadPath, file.filename);
+  let filePath;
+
   const {
     no_rep,
     no_seri,
@@ -651,7 +688,15 @@ app.post("/api/edit-flk", upload.single("pic"), async (req, res) => {
     saran,
     status_res,
     no_lap,
+    id_teknisi,
   } = fields;
+
+  if (file) {
+    filePath = path.join(uploadPath, file.filename);
+    return res.status(400).json({ ok: false, message: "File is required" });
+  } else {
+    filePath = fields.pic;
+  }
 
   const transaction = new sql.Transaction(pool);
   try {
@@ -669,7 +714,7 @@ app.post("/api/edit-flk", upload.single("pic"), async (req, res) => {
     const selesai = formatDateForSQL(waktu_selesai);
 
     let query = `
-      UPDATE [dbo].[WebVTK]
+      UPDATE dbo.${process.env.TABLE_LK}
       SET 
         no_seri = '${no_seri}', no_cus = '${no_cus}',
         no_call = '${no_call}', pelapor = '${pelapor}', waktu_call = '${call}',
@@ -678,7 +723,7 @@ app.post("/api/edit-flk", upload.single("pic"), async (req, res) => {
         problem = '${problem}', kat_problem = '${kat_problem}', solusi = '${solusi}',
         waktu_mulai = '${mulai}', waktu_selesai = '${selesai}',
         count_bw = '${count_bw}', count_cl = '${count_cl}',
-        saran = '${saran}', status_res = '${status_res}', no_lap = '${no_lap}'
+        saran = '${saran}', status_res = '${status_res}', no_lap = '${no_lap}', id_teknisi = '${id_teknisi}'
     `;
 
     if (rep_ke) {
@@ -686,7 +731,7 @@ app.post("/api/edit-flk", upload.single("pic"), async (req, res) => {
     }
 
     if (no_rep) {
-      query += `, no_rep = '${no_rep}'`;
+      query += `, no_rep = '${no_rep || null}'`;
     }
 
     if (file) {
@@ -2120,12 +2165,12 @@ app.post("/api/export-lk-noseri", async (req, res) => {
 
 // ==== USER CRUD ====
 app.post("/api/create-users", upload.none(), async (req, res) => {
-  const { name, email, type, role } = req.body;
+  const { name, email, role } = req.body;
 
   try {
     const query = `
-      INSERT INTO dbo.${process.env.TABLE_USER} (name, email, type, role)
-      VALUES ('${name}', '${email}', '${type}', '${role}')
+      INSERT INTO dbo.${process.env.TABLE_USER} (name, email, role, created_by)
+      VALUES ('${name}', '${email}', '${role}', '1')
     `;
 
     const result = await pool.query(query);
@@ -2140,19 +2185,17 @@ app.post("/api/create-users", upload.none(), async (req, res) => {
 
 app.post("/api/edit-users", upload.none(), async (req, res) => {
   const { id } = req.query;
-  const { name, email, type, role } = req.body;
-  // let filePath = null;
+  const { name, email, role } = req.body;
 
-  // const file = req.file;
-  // if (file) filePath = path.join(uploadPath, file.filename);
+  const now = formatDateForSQL(dayjs());
 
   try {
     const query = `
       UPDATE [dbo].${process.env.TABLE_USER}
       SET [email] = '${email}'
-      ,[type] = '${type}'
       ,[role] = '${role}'
       ,[name] = '${name}'
+      ,[updated_at] = '${now}'
       WHERE id = '${id}'
     `;
 
@@ -2180,7 +2223,7 @@ app.get("/api/get-users", async (req, res) => {
 app.get("/api/get-teknisi", async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT * FROM dbo.${process.env.TABLE_USER} WHERE role = 1`
+      `SELECT * FROM dbo.${process.env.TABLE_USER} WHERE role LIKE '%1%'`
     );
     res.json(result.recordset);
   } catch (err) {
@@ -2191,7 +2234,7 @@ app.get("/api/get-teknisi", async (req, res) => {
 app.get("/api/get-spv", async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT * FROM dbo.${process.env.TABLE_USER}  WHERE role = 3`
+      `SELECT * FROM dbo.${process.env.TABLE_USER}  WHERE role LIKE '%2%'`
     );
     res.json(result.recordset);
   } catch (err) {
@@ -2923,7 +2966,7 @@ app.get("/api/get-noseri-contract", async (req, res) => {
 app.get("/api/get-area", async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT * FROM dbo.${process.env.TABLE_AREA}`
+      `SELECT groups, count(kode_area) AS count FROM dbo.${process.env.TABLE_AREA} AS area GROUP BY groups`
     );
     res.json(result.recordset);
   } catch (err) {
@@ -2943,24 +2986,54 @@ app.get("/api/get-area-groups", async (req, res) => {
 });
 
 app.post("/api/create-area", upload.none(), async (req, res) => {
-  const { kode_area, nama_area, groups, id_supervisor, id_teknisi } = req.body;
+  const { kode_area, groups, id_supervisor, id_teknisi } = req.body;
   const now = dayjs();
+
+  const kodeAreas = JSON.parse(kode_area);
+  if (!Array.isArray(kodeAreas)) {
+    throw new Error("kode_area must be an array");
+  }
 
   const transaction = new sql.Transaction(pool);
   try {
     await transaction.begin();
     const request = new sql.Request(transaction);
 
-    const query = `
-      INSERT INTO dbo.${
-        process.env.TABLE_AREA
-      } (kode_area, nama_area, groups, id_supervisor, updated_at, id_teknisi)
-      VALUES ('${kode_area}', '${nama_area}', '${groups}', '${id_supervisor}', '${formatDateForSQL(
-      now
-    )}', '${id_teknisi}')
-    `;
+    let allInserted = true;
+    const failed = [];
 
-    await request.query(query);
+    for (const [index, item] of kodeAreas.entries()) {
+      try {
+        const query = `
+        INSERT INTO dbo.${
+          process.env.TABLE_AREA
+        } (kode_area, nama_area, groups, id_supervisor, updated_at, id_teknisi)
+        VALUES ('${item.kode_area}', '${
+          item.nama_area
+        }', '${groups}', '${id_supervisor}', '${formatDateForSQL(
+          now
+        )}', '${JSON.stringify(item.teknisi)}')
+      `;
+
+        await request.query(query);
+      } catch (error) {
+        allInserted = false;
+        failed.push({
+          index,
+          kode_area: item.kode_area,
+          error: error.message,
+        });
+        console.error(`Failed to insert ${item.kode_area}:`, error);
+        break; // Exit loop on first failure
+      }
+    }
+
+    if (!allInserted) {
+      throw new Error(
+        `Kode area insertion failed for items: ${JSON.stringify(failed)}`
+      );
+    }
+
     await transaction.commit();
     res.json({ ok: true, message: "Area inserted" });
   } catch (err) {
@@ -2991,12 +3064,12 @@ app.post("/api/create-area", upload.none(), async (req, res) => {
   }
 });
 
-app.get("/api/get-area-by-id", async (req, res) => {
-  const { id = "" } = req.query;
+app.get("/api/get-area-by-groups", async (req, res) => {
+  const { groups = "" } = req.query;
 
   try {
     const result = await pool.query(
-      `SELECT * FROM dbo.${process.env.TABLE_AREA} WHERE id = '${id}'`
+      `SELECT * FROM dbo.${process.env.TABLE_AREA} WHERE groups = '${groups}'`
     );
     res.json(result.recordset);
   } catch (err) {
@@ -3105,7 +3178,7 @@ app.get("/api/get-no-customer-edit", async (req, res) => {
 app.get("/api/get-kode-area", async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT kode_area FROM dbo.${process.env.TABLE_AREA}`
+      `SELECT kode_area, id, groups FROM dbo.${process.env.TABLE_AREA}`
     );
     res.json(result.recordset);
   } catch (err) {

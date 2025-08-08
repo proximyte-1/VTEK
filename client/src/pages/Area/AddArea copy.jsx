@@ -16,7 +16,6 @@ import {
   Box,
   FormControl,
   FormHelperText,
-  Autocomplete,
 } from "@mui/material";
 import { useAlert } from "../../utils/alert";
 import { useNavigate } from "react-router-dom";
@@ -28,7 +27,7 @@ import { DatePicker, LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { maxDateTime, minDateTime, selectService } from "../../utils/constants";
 import * as yup from "yup";
-import MultipleItemTableInputArea from "../../components/MultipleTableInputArea/MultipleItemTableInputArea";
+import MultipleItemTableInput from "../../components/MultipleTableInput/MultipleItemTableInput";
 
 const AddArea = () => {
   const navigate = useNavigate();
@@ -41,23 +40,11 @@ const AddArea = () => {
 
   const schema = useMemo(() => {
     return yup.object().shape({
-      kode_area: yup
-        .array()
-        .default([])
-        .of(
-          yup.object().shape({
-            id: yup.string().required(), // IDs are generated, but schema should know
-            kode_area: yup.string().required("Kode Area is required"),
-            nama_area: yup.string().required("Nama Area is required"),
-            teknisi: yup
-              .array()
-              .required("Teknisi is required")
-              .min(1, "Minimal 1 teknisi di masukkan."),
-          })
-        )
-        .min(1, "Minimal 1 area di masukkan."),
+      kode_area: yup.string().required(),
+      nama_area: yup.string().required(),
       groups: yup.string().required(),
-      id_supervisor: yup.array().required(),
+      id_supervisor: yup.number().required(),
+      id_teknisi: yup.number().required(),
     });
   }, []);
 
@@ -74,9 +61,11 @@ const AddArea = () => {
     resolver: yupResolver(schema),
     context: { isEdit: false },
     defaultValues: {
-      kode_area: [],
+      kode_area: "",
+      nama_area: "",
       groups: "",
-      id_supervisor: [],
+      id_supervisor: "",
+      id_teknisi: "",
     },
   });
 
@@ -119,26 +108,44 @@ const AddArea = () => {
     getSPVData();
   }, []);
 
+  // const checkNoSeri = async (id_kontrak, seri) => {
+  //   try {
+  //     const response = await axios.get(
+  //       `${import.meta.env.VITE_API_URL}api/get-noseri-contract`,
+  //       {
+  //         params: {
+  //           id_contract: id_kontrak,
+  //         },
+  //       }
+  //     );
+
+  //     const data = response.data;
+
+  //     const noSeriInput = seri.map((item) => item.no_seri);
+  //     const noSeriContract = data.map((item) => item.no_seri);
+
+  //     // Check if every no_seri in noSeriArray exists in targetNoSeri
+  //     const exist = noSeriInput.every((noSeri) =>
+  //       noSeriContract.includes(noSeri)
+  //     );
+
+  //     return exist;
+  //   } catch (error) {
+  //     console.error("Error for checking the no seri:", error);
+  //     showAlert("Terjadi kesalahan saat memeriksa no seri.", "error");
+  //   }
+  // };
+
   const onSubmit = async (values) => {
-    // setLoading(true);
+    setLoading(true);
     try {
       const data = new FormData();
 
       // Append all fields except special ones
       Object.entries(values).forEach(([key, value]) => {
-        if (key === "kode_area") {
-          data.append(key, JSON.stringify(value));
-          console.log(key + " = " + JSON.stringify(value));
-        } else if (key === "id_supervisor") {
-          data.append(key, JSON.stringify(value));
-          console.log(key + " = " + JSON.stringify(value));
-        } else {
-          data.append(key, value);
-          console.log(key + " = " + value);
-        }
+        console.log(key + " = " + value);
+        data.append(key, value);
       });
-
-      return;
 
       // Submit main form
       const response = await axios.post(
@@ -192,6 +199,32 @@ const AddArea = () => {
         >
           <Grid container spacing={5} marginY={"2em"} alignItems="center">
             <Grid size={{ xs: 12, md: 6 }}>
+              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="kode_area">
+                Kode Area
+              </Typography>
+              <TextField
+                variant="outlined"
+                fullWidth
+                {...register("kode_area")}
+                error={!!errors.kode_area}
+                helperText={errors.kode_area?.message}
+              />
+            </Grid>
+
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="nama_area">
+                Nama Area
+              </Typography>
+              <TextField
+                variant="outlined"
+                fullWidth
+                {...register("nama_area")}
+                error={!!errors.nama_area}
+                helperText={errors.nama_area?.message}
+              />
+            </Grid>
+
+            <Grid size={{ xs: 12, md: 6 }}>
               <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="groups">
                 Group
               </Typography>
@@ -209,66 +242,67 @@ const AddArea = () => {
                 <Controller
                   name="id_supervisor"
                   control={control}
-                  rules={{ required: "Supervisor is required" }}
-                  render={({ field, fieldState: { error } }) => (
-                    <>
+                  rules={{ required: "Supervisor is required" }} // Add your validation rules here
+                  render={({ field }) => (
+                    <FormControl fullWidth error={!!errors.id_supervisor}>
                       <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
                         Pilih Supervisor
                       </Typography>
-                      <Autocomplete
+                      <Select
+                        id="supervisor-select"
+                        variant="outlined"
                         {...field}
-                        multiple
-                        id="spv-autocomplete"
-                        options={dataSPV || []}
-                        getOptionLabel={(option) => option.name || ""}
-                        isOptionEqualToValue={(option, value) =>
-                          option.id === value.id
-                        }
-                        onChange={(event, newValue) => {
-                          // Pass an array of IDs to the form state
-                          field.onChange(newValue.map((option) => option.id));
-                        }}
-                        // The value prop must be an array of objects
-                        value={
-                          dataSPV.filter((option) =>
-                            field.value?.includes(option.id)
-                          ) || []
-                        }
-                        filterSelectedOptions
-                        renderInput={(params) => (
-                          <TextField
-                            {...params}
-                            variant="outlined"
-                            fullWidth
-                            error={!!error}
-                            helperText={error ? error.message : null}
-                          />
-                        )}
-                      />
-                    </>
+                        displayEmpty
+                      >
+                        {dataSPV.map((item) => (
+                          <MenuItem key={item.id} value={item.id}>
+                            {item.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      {errors.id_supervisor && (
+                        <FormHelperText>
+                          {errors.id_supervisor?.message}
+                        </FormHelperText>
+                      )}
+                    </FormControl>
                   )}
                 />
               </Grid>
             )}
 
-            <Grid container size={{ xs: 12, md: 12 }}>
-              <Controller
-                name="kode_area" // This name maps to the 'lineItems' in your Yup schema and form data
-                control={control}
-                render={({ field }) => (
-                  <MultipleItemTableInputArea
-                    value={field.value} // Pass the array of items from RHF's state to your component
-                    onChange={field.onChange} // Pass RHF's onChange to your component for updates
-                    teknisiOptions={dataUser}
-                  />
-                )}
-              />
-              {/* Display error message for the entire lineItems array if validation fails */}
-            </Grid>
-            {errors.kode_area && (
-              <Typography color="error" variant="body1" sx={{ mt: 0.5, ml: 2 }}>
-                {errors.kode_area.message}
-              </Typography>
+            {dataUser && (
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Controller
+                  name="id_teknisi"
+                  control={control}
+                  rules={{ required: "Teknisi is required" }} // Add your validation rules here
+                  render={({ field }) => (
+                    <FormControl fullWidth error={!!errors.id_teknisi}>
+                      <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
+                        Pilih Teknisi
+                      </Typography>
+                      <Select
+                        id="teknisi-select"
+                        variant="outlined"
+                        {...field}
+                        displayEmpty
+                      >
+                        {dataUser.map((item) => (
+                          <MenuItem key={item.id} value={item.id}>
+                            {item.name}
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      {errors.id_teknisi && (
+                        <FormHelperText>
+                          {errors.id_teknisi?.message}
+                        </FormHelperText>
+                      )}
+                    </FormControl>
+                  )}
+                />
+              </Grid>
             )}
           </Grid>
 

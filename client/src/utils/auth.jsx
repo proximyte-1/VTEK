@@ -12,6 +12,7 @@ export const Auth = ({ children }) => {
   const [user, setUser] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isRegisted, setIsRegisted] = useState(true);
 
   useEffect(() => {
     const checkAuthStatus = async () => {
@@ -41,6 +42,13 @@ export const Auth = ({ children }) => {
           }
         );
 
+        const data = db_response.data;
+
+        if (data.length <= 0) {
+          setIsRegisted(false);
+          return;
+        }
+
         const dbData = db_response.data[0];
 
         const updatedUser = {
@@ -50,6 +58,7 @@ export const Auth = ({ children }) => {
           id_user: dbData?.id, // Add/overwrite id_user (renamed from dbData?.id)
         };
 
+        setIsRegisted(true);
         setUser(updatedUser);
         setIsAuthenticated(true);
         // Your server's deserializeUser returns the full profile, which has a 'displayName' property.
@@ -133,7 +142,7 @@ export const Auth = ({ children }) => {
 
   return (
     <AuthContext.Provider
-      value={{ user, isAuthenticated, isLoading, login, logout }}
+      value={{ user, isAuthenticated, isRegisted, isLoading, login, logout }}
     >
       {children}
     </AuthContext.Provider>

@@ -170,28 +170,10 @@ const TeknisiReport = () => {
   const [loading, setLoading] = useState(false);
   const [datas, setDatas] = useState([]);
   const [teknisi, setTeknisi] = useState([]);
+  const [customer, setCustomer] = useState([]);
   const { alert, showAlert, closeAlert } = useAlert();
 
   useEffect(() => {
-    const fetchTeknisi = async () => {
-      try {
-        axios
-          .get(`${import.meta.env.VITE_API_URL}api/get-teknisi`)
-          .then((res) => {
-            if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-              // Store the array of objects directly
-              setTeknisi(res.data);
-            } else {
-              setTeknisi([]);
-              showAlert("Data teknisi belum ada.", "error");
-            }
-          });
-      } catch (err) {
-        console.error("Terjadi kesalahan saat memanggil data: ", err);
-        showAlert("Terjadi kesalahan saat memanggil data", "error");
-      }
-    };
-
     if (location.state?.message) {
       setAlertData({
         message: location.state.message,
@@ -201,7 +183,46 @@ const TeknisiReport = () => {
     }
 
     fetchTeknisi();
+    fetchCustomer();
   }, [location.state]);
+
+  const fetchTeknisi = async () => {
+    try {
+      axios
+        .get(`${import.meta.env.VITE_API_URL}api/get-teknisi`)
+        .then((res) => {
+          if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+            // Store the array of objects directly
+            setTeknisi(res.data);
+          } else {
+            setTeknisi([]);
+            showAlert("Data teknisi belum ada.", "error");
+          }
+        });
+    } catch (err) {
+      console.error("Terjadi kesalahan saat memanggil data: ", err);
+      showAlert("Terjadi kesalahan saat memanggil data", "error");
+    }
+  };
+
+  const fetchCustomer = async () => {
+    try {
+      axios
+        .get(`${import.meta.env.VITE_API_URL}api/get-customer`)
+        .then((res) => {
+          if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+            // Store the array of objects directly
+            setCustomer(res.data);
+          } else {
+            setCustomer([]);
+            showAlert("Data Customer belum ada.", "error");
+          }
+        });
+    } catch (err) {
+      console.error("Terjadi kesalahan saat memanggil data: ", err);
+      showAlert("Terjadi kesalahan saat memanggil data", "error");
+    }
+  };
 
   // Export handler
   const handleExport = async () => {
@@ -296,6 +317,7 @@ const TeknisiReport = () => {
             encType="multipart/form-data"
           >
             <Grid container spacing={5} marginY={"2em"} alignItems="center">
+              {/* Periode Dari */}
               <Grid size={{ xs: 12, md: 6 }}>
                 <InputLabel id="waktu_dari">Waktu Dari</InputLabel>
                 <Controller
@@ -317,6 +339,7 @@ const TeknisiReport = () => {
                 />
               </Grid>
 
+              {/* Periode Sampai */}
               <Grid size={{ xs: 12, md: 6 }}>
                 <InputLabel id="waktu_sampai">Waktu Sampai</InputLabel>
                 <Controller
@@ -354,6 +377,7 @@ const TeknisiReport = () => {
                 />
               </Grid>
 
+              {/* Jenis LK */}
               <Grid size={{ xs: 12, md: 6 }}>
                 <Controller
                   name="type"
@@ -384,6 +408,59 @@ const TeknisiReport = () => {
                 />
               </Grid>
 
+              {/* No. Seri */}
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="no_seri">
+                  No. Seri
+                </Typography>
+                <TextField
+                  variant="outlined"
+                  fullWidth
+                  {...register("no_seri")}
+                  error={!!errors.no_seri}
+                  helperText={errors.no_seri?.message}
+                />
+              </Grid>
+
+              {/* Customer */}
+              {customer && (
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Controller
+                    name="no_cus"
+                    control={control}
+                    rules={{ required: "No Customer is required" }} // Add your validation rules here
+                    render={({ field }) => (
+                      <FormControl fullWidth error={!!errors.no_cus}>
+                        <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
+                          Pilih Customer
+                        </Typography>
+                        <Select
+                          id="customer-select"
+                          variant="outlined"
+                          {...field}
+                          displayEmpty
+                        >
+                          {customer.map((item) => (
+                            <MenuItem key={item.id} value={item.no_cus}>
+                              {`${item.nama_cus} (${item.alias})`}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                        {errors.no_cus && (
+                          <FormHelperText>
+                            {errors.no_cus?.message}
+                          </FormHelperText>
+                        )}
+                      </FormControl>
+                    )}
+                  />
+                </Grid>
+              )}
+
+              {/* Area Groups */}
+              {/* Area Kode Area */}
+
+              {/* Teknisi */}
               {teknisi && (
                 <Grid size={{ xs: 12, md: 6 }}>
                   <Controller

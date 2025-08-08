@@ -42,12 +42,14 @@ import {
   selectStatusCall,
   selectStatusResult,
 } from "../../../utils/constants";
+import { useAuth } from "../../../utils/auth";
 
 const AddNoSeri = () => {
   const navigate = useNavigate();
   const location = useLocation(); // Initialize useLocation hook
   const { initialNoSeri } = location.state || {}; // Get initialNoSeri from location state
 
+  const { user } = useAuth();
   const { alert, showAlert, closeAlert } = useAlert();
   const [customer, setDataCustomer] = useState([]);
   const [searched, setSearched] = useState(false);
@@ -55,6 +57,8 @@ const AddNoSeri = () => {
   const [lastService, setLastService] = useState([]);
   const [contract, setContract] = useState([]);
   const [instalasi, setInstalasi] = useState([]);
+  const [area, setArea] = useState([]);
+  const [teknisi, setTeknisi] = useState([]);
   const [expand, setExpand] = useState(true);
   const [retry, setRetry] = useState(false);
 
@@ -147,6 +151,7 @@ const AddNoSeri = () => {
             ),
         otherwise: (schema) => schema.nullable().notRequired(),
       }),
+      id_teknisi: yup.number().required(),
     });
   }, [lastService]);
 
@@ -182,9 +187,9 @@ const AddNoSeri = () => {
       saran: "",
       status_res: "",
       no_fd: "",
+      id_teknisi: "",
       rep_ke: 0,
       pic: null,
-      no_fd: "",
     },
   });
 
@@ -325,6 +330,8 @@ const AddNoSeri = () => {
         return;
       }
 
+      const dataInstalasi = await fetchDataInstalasi(displayValue(data[0].id));
+
       setContract(data[0]);
     } catch (error) {
       console.error("Error fetching contract:", error);
@@ -332,13 +339,13 @@ const AddNoSeri = () => {
     }
   };
 
-  const fetchDataInstalasi = async (no_seri) => {
+  const fetchDataInstalasi = async (id_contract) => {
     try {
       const response = await axios.get(
         `${import.meta.env.VITE_API_URL}api/get-instalasi-lk`,
         {
           params: {
-            no_seri: no_seri,
+            id_contract: id_contract,
           },
         }
       );
@@ -357,6 +364,32 @@ const AddNoSeri = () => {
     }
   };
 
+  const fetchDataArea = async (no_cus) => {
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}api/get-area-lk`,
+        {
+          params: {
+            no_cus: no_cus,
+          },
+        }
+      );
+
+      const data = response.data;
+
+      if (data.length <= 0) {
+        setArea(null);
+        return;
+      }
+
+      setArea(data);
+      setTeknisi(data.teknisi);
+    } catch (error) {
+      console.error("Error fetching data area:", error);
+      showAlert("Gagal mengambil data area", "error");
+    }
+  };
+
   const handleSearch = async () => {
     setLoading(true);
 
@@ -369,7 +402,7 @@ const AddNoSeri = () => {
       return;
     }
 
-    reset({ no_seri: noSeri });
+    // reset({ no_seri: noSeri });
 
     try {
       // Fetch customer data
@@ -383,8 +416,8 @@ const AddNoSeri = () => {
           displayValue(customer["d:Sell_to_Customer_No"])
         );
 
-        const dataInstalasi = await fetchDataInstalasi(
-          displayValue(customer["d:Serial_No"])
+        const dataArea = await fetchDataArea(
+          displayValue(customer["d:Sell_to_Customer_No"])
         );
 
         await fetchContRes(
@@ -413,7 +446,6 @@ const AddNoSeri = () => {
       const data = new FormData();
 
       // Always append the file
-      data.append("created_by", 1);
       data.append("type", 2);
 
       // Append all fields except special ones
@@ -431,6 +463,11 @@ const AddNoSeri = () => {
           data.append(key, value);
         }
       });
+
+      data.append("created_by", user?.id_user || "0");
+      // if (user) {
+      //   data.append("created_by", user?.id_user || "0");
+      // }
 
       const response = await axios.post(
         import.meta.env.VITE_API_URL + `api/create-flk`,
@@ -566,11 +603,19 @@ const AddNoSeri = () => {
                       {/* Row 2 */}
                       <Grid size={{ xs: 12, md: 6 }}>
                         <Grid>
-                          <Typography>Kode Area :</Typography>
-                          <Typography>Group :</Typography>
+                          <Typography>
+                            Kode Area : {displayValue(area?.kode_area)}
+                          </Typography>
+                          <Typography>
+                            Group : {displayValue(area?.groups)}
+                          </Typography>
                         </Grid>
-                        <Typography>Supervisor :</Typography>
-                        <Typography>Teknisi :</Typography>
+                        <Typography>
+                          Supervisor : {displayValue(area?.nama_spv)}
+                        </Typography>
+                        <Typography>
+                          Teknisi : {displayValue(area?.nama_teknisi)}
+                        </Typography>
                         <Typography>C.S.O :</Typography>
                       </Grid>
                     </Grid>
@@ -684,6 +729,36 @@ const AddNoSeri = () => {
                           error={!!errors.no_fd}
                           helperText={errors.no_fd?.message}
                         />
+                      </Grid>
+
+                      <Grid size={{ xs: 12, md: 6 }}>
+                        <FormControl fullWidth required>
+                          <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
+                            Pilih Teknisi
+                          </Typography>
+                          <Controller
+                            name="id_teknisi"
+                            control={control}
+                            render={({ field }) => (
+                              <Select
+                                {...field}
+                                variant="outlined"
+                                displayEmpty
+                              >
+                                <MenuItem disabled value="">
+                                  <em>Pilih Teknisi</em>
+                                </MenuItem>
+                                {Object.entries(teknisi).map(
+                                  ([value, { name, id }]) => (
+                                    <MenuItem key={value} value={id}>
+                                      {name}
+                                    </MenuItem>
+                                  )
+                                )}
+                              </Select>
+                            )}
+                          />
+                        </FormControl>
                       </Grid>
                     </Grid>
                   </AccordionDetails>
@@ -856,7 +931,11 @@ const AddNoSeri = () => {
                             name="status_call"
                             control={control}
                             render={({ field }) => (
-                              <Select {...field} variant="outlined">
+                              <Select
+                                {...field}
+                                variant="outlined"
+                                displayEmpty
+                              >
                                 <MenuItem disabled value="">
                                   <em>Pilih Kategori Status Call</em>
                                 </MenuItem>
@@ -899,7 +978,11 @@ const AddNoSeri = () => {
                             control={control}
                             variant="outlined"
                             render={({ field }) => (
-                              <Select {...field}>
+                              <Select
+                                {...field}
+                                variant="outlined"
+                                displayEmpty
+                              >
                                 <MenuItem disabled value="">
                                   <em>Pilih Kategori Keluhan</em>
                                 </MenuItem>
@@ -965,7 +1048,11 @@ const AddNoSeri = () => {
                             control={control}
                             variant="outlined"
                             render={({ field }) => (
-                              <Select {...field}>
+                              <Select
+                                {...field}
+                                variant="outlined"
+                                displayEmpty
+                              >
                                 <MenuItem disabled value="">
                                   <em>Pilih Kategori Problem</em>
                                 </MenuItem>
@@ -1162,7 +1249,11 @@ const AddNoSeri = () => {
                             name="status_res"
                             control={control}
                             render={({ field }) => (
-                              <Select {...field} variant="outlined">
+                              <Select
+                                {...field}
+                                variant="outlined"
+                                displayEmpty
+                              >
                                 <MenuItem disabled value="">
                                   <em>Pilih Status Result</em>
                                 </MenuItem>

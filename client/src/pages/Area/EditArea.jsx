@@ -15,6 +15,7 @@ import {
   MenuItem,
   FormControl,
   FormHelperText,
+  Autocomplete,
 } from "@mui/material";
 import { useAlert } from "../../utils/alert";
 import { useNavigate, useParams } from "react-router-dom";
@@ -27,6 +28,7 @@ import { AdapterDayjs } from "@mui/x-date-pickers/AdapterDayjs";
 import { maxDateTime, minDateTime, selectService } from "../../utils/constants";
 import dayjs from "dayjs";
 import { FormatAlignCenter } from "@mui/icons-material";
+import MultipleItemTableInputArea from "../../components/MultipleTableInputArea/MultipleItemTableInputArea";
 
 const EditArea = () => {
   const { id } = useParams();
@@ -40,11 +42,22 @@ const EditArea = () => {
 
   const schema = useMemo(() => {
     return yup.object().shape({
-      kode_area: yup.string().required(),
-      nama_area: yup.string().required(),
+      kode_area: yup
+        .array()
+        .of(
+          yup.object().shape({
+            id: yup.string().required(), // IDs are generated, but schema should know
+            kode_area: yup.string().required("Kode Area is required"),
+            nama_area: yup.string().required("Nama Area is required"),
+            teknisi: yup
+              .array()
+              .required("Teknisi is required")
+              .min(1, "Minimal 1 teknisi di masukkan."),
+          })
+        )
+        .min(1, "Minimal 1 area di masukkan."),
       groups: yup.string().required(),
-      id_supervisor: yup.number().required(),
-      id_teknisi: yup.number().required(),
+      id_supervisor: yup.array().required(),
     });
   }, []);
 
@@ -61,11 +74,9 @@ const EditArea = () => {
     resolver: yupResolver(schema),
     context: { isEdit: false },
     defaultValues: {
-      kode_area: "",
-      nama_area: "",
+      kode_area: [],
       groups: "",
-      id_supervisor: "",
-      id_teknisi: "",
+      id_supervisor: [],
     },
   });
 
@@ -73,19 +84,36 @@ const EditArea = () => {
     const fetchAreaById = async () => {
       try {
         const response = await axios.get(
-          `${import.meta.env.VITE_API_URL}api/get-area-by-id?id=${id}`
+          `${import.meta.env.VITE_API_URL}api/get-area-by-groups?groups=${id}`
         );
 
-        const data = response.data[0];
+        const data = response.data;
+
+        const transformedData = data.map((item) => {
+          // Use JSON.parse to convert the stringified arrays into real JavaScript arrays.
+          const teknisi = JSON.parse(item.id_teknisi);
+
+          // A simple way to generate a unique ID.
+          const uniqueId = Date.now().toString();
+
+          return {
+            kode_area: item.kode_area,
+            nama_area: item.nama_area,
+            teknisi: teknisi,
+            id: uniqueId,
+          };
+        });
+
+        console.log(transformedData);
 
         Object.entries(data).forEach(([key, value]) => {
-          let parsedValue = value;
-
-          if (["tgl_instalasi"].includes(key)) {
-            parsedValue = value ? dayjs(value) : null;
+          if (key === "kode_area") {
+            setValue(key, transformedData, { shouldDirty: true });
+          } else if (key === "id_supervisor") {
+            setValue(key, JSON.parse(value), { shouldDirty: true });
+          } else {
+            setValue(key, value, { shouldDirty: true });
           }
-
-          setValue(key, parsedValue, { shouldDirty: true });
         });
       } catch (err) {
         console.error("No data found or is missing");
@@ -139,7 +167,13 @@ const EditArea = () => {
 
       // Append all fields except special ones
       Object.entries(values).forEach(([key, value]) => {
-        data.append(key, value);
+        if (key === "kode_area") {
+          data.append(key, JSON.stringify(value));
+        } else if (key === "id_supervisor") {
+          data.append(key, JSON.stringify(value));
+        } else {
+          data.append(key, value);
+        }
       });
 
       // Submit main form
@@ -196,38 +230,11 @@ const EditArea = () => {
         >
           <Grid container spacing={5} marginY={"2em"} alignItems="center">
             <Grid size={{ xs: 12, md: 6 }}>
-              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="kode_area">
-                Kode Area
-              </Typography>
-              <TextField
-                variant="outlined"
-                fullWidth
-                {...register("kode_area")}
-                error={!!errors.kode_area}
-                helperText={errors.kode_area?.message}
-              />
-            </Grid>
-
-            <Grid size={{ xs: 12, md: 6 }}>
-              <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="nama_area">
-                Nama Area
-              </Typography>
-              <TextField
-                variant="outlined"
-                fullWidth
-                {...register("nama_area")}
-                error={!!errors.nama_area}
-                helperText={errors.nama_area?.message}
-              />
-            </Grid>
-
-            <Grid size={{ xs: 12, md: 6 }}>
               <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }} id="groups">
                 Group
               </Typography>
               <TextField
                 variant="outlined"
-                maxLength="5"
                 fullWidth
                 {...register("groups")}
                 error={!!errors.groups}
@@ -240,67 +247,66 @@ const EditArea = () => {
                 <Controller
                   name="id_supervisor"
                   control={control}
-                  rules={{ required: "Supervisor is required" }} // Add your validation rules here
-                  render={({ field }) => (
-                    <FormControl fullWidth error={!!errors.id_supervisor}>
+                  rules={{ required: "Supervisor is required" }}
+                  render={({ field, fieldState: { error } }) => (
+                    <>
                       <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
                         Pilih Supervisor
                       </Typography>
-                      <Select
-                        id="supervisor-select"
-                        variant="outlined"
+                      <Autocomplete
                         {...field}
-                        displayEmpty
-                      >
-                        {dataSPV.map((item) => (
-                          <MenuItem key={item.id} value={item.id}>
-                            {item.name}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                      {errors.id_supervisor && (
-                        <FormHelperText>
-                          {errors.id_supervisor?.message}
-                        </FormHelperText>
-                      )}
-                    </FormControl>
+                        multiple
+                        id="spv-autocomplete"
+                        options={dataSPV || []}
+                        getOptionLabel={(option) => option.name || ""}
+                        isOptionEqualToValue={(option, value) =>
+                          option.id === value.id
+                        }
+                        onChange={(event, newValue) => {
+                          // Pass an array of IDs to the form state
+                          field.onChange(newValue.map((option) => option.id));
+                        }}
+                        // The value prop must be an array of objects
+                        value={
+                          dataSPV.filter((option) =>
+                            field.value?.includes(option.id)
+                          ) || []
+                        }
+                        filterSelectedOptions
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            variant="outlined"
+                            fullWidth
+                            error={!!error}
+                            helperText={error ? error.message : null}
+                          />
+                        )}
+                      />
+                    </>
                   )}
                 />
               </Grid>
             )}
 
-            {dataUser && (
-              <Grid size={{ xs: 12, md: 6 }}>
-                <Controller
-                  name="id_teknisi"
-                  control={control}
-                  rules={{ required: "Teknisi is required" }} // Add your validation rules here
-                  render={({ field }) => (
-                    <FormControl fullWidth error={!!errors.id_teknisi}>
-                      <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
-                        Pilih Teknisi
-                      </Typography>
-                      <Select
-                        id="teknisi-select"
-                        variant="outlined"
-                        {...field}
-                        displayEmpty
-                      >
-                        {dataUser.map((item) => (
-                          <MenuItem key={item.id} value={item.id}>
-                            {item.name}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                      {errors.id_teknisi && (
-                        <FormHelperText>
-                          {errors.id_teknisi?.message}
-                        </FormHelperText>
-                      )}
-                    </FormControl>
-                  )}
-                />
-              </Grid>
+            <Grid container size={{ xs: 12, md: 12 }}>
+              <Controller
+                name="kode_area" // This name maps to the 'lineItems' in your Yup schema and form data
+                control={control}
+                render={({ field }) => (
+                  <MultipleItemTableInputArea
+                    value={field.value} // Pass the array of items from RHF's state to your component
+                    onChange={field.onChange} // Pass RHF's onChange to your component for updates
+                    teknisiOptions={dataUser}
+                  />
+                )}
+              />
+              {/* Display error message for the entire lineItems array if validation fails */}
+            </Grid>
+            {errors.kode_area && (
+              <Typography color="error" variant="body1" sx={{ mt: 0.5, ml: 2 }}>
+                {errors.kode_area.message}
+              </Typography>
             )}
           </Grid>
 

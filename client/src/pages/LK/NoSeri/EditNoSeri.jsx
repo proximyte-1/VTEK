@@ -52,11 +52,13 @@ import {
   selectStatusResult,
 } from "../../../utils/constants";
 import { yupResolver } from "@hookform/resolvers/yup";
+import { useAuth } from "../../../utils/auth";
 
 const EditNoSeri = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
+  const { user } = useAuth();
   const { alert, showAlert, closeAlert } = useAlert();
   const [customer, setDataCustomer] = useState([]);
   const [searched, setSearched] = useState(true);
@@ -64,6 +66,8 @@ const EditNoSeri = () => {
   const [lastService, setLastService] = useState([]);
   const [contract, setContract] = useState([]);
   const [instalasi, setInstalasi] = useState([]);
+  const [area, setArea] = useState([]);
+  const [teknisi, setTeknisi] = useState([]);
   const [expand, setExpand] = useState(true);
   const [retry, setRetry] = useState(false);
 
@@ -71,6 +75,7 @@ const EditNoSeri = () => {
     return yup.object().shape({
       no_seri: yup.string().required(),
       no_call: yup.string().required(),
+      no_fd: yup.string().required(),
       no_lap: yup.string().required(),
       pelapor: yup.string().required(),
       waktu_call: yup.date().required(),
@@ -93,10 +98,12 @@ const EditNoSeri = () => {
         .required()
         .test(
           "not-less-than-previous-bw",
-          `Tidak boleh kurang dari data sebelumnya (${lastService.count_bw}).`,
+          `Tidak boleh kurang dari data sebelumnya (${
+            lastService?.count_bw || 0
+          }).`,
           function (value) {
-            const { count_bw } = lastService;
-            const n_count = Number(count_bw);
+            const { count_bw } = lastService || {};
+            const n_count = Number(count_bw) || 0;
             const n_val = Number(value);
 
             if (n_val === undefined || n_val === null) return false;
@@ -108,10 +115,12 @@ const EditNoSeri = () => {
         .required()
         .test(
           "not-less-than-previous-cl",
-          `Tidak boleh kurang dari data sebelumnya (${lastService.count_cl}).`,
+          `Tidak boleh kurang dari data sebelumnya (${
+            lastService?.count_cl || 0
+          }).`,
           function (value) {
-            const { count_cl } = lastService;
-            const n_count = Number(count_cl);
+            const { count_cl } = lastService || {};
+            const n_count = Number(count_cl) || 0;
             const n_val = Number(value);
 
             if (n_val === undefined || n_val === null) return false;
@@ -151,6 +160,7 @@ const EditNoSeri = () => {
             ),
         otherwise: (schema) => schema.nullable().notRequired(),
       }),
+      id_teknisi: yup.number().required(),
     });
   }, [lastService]);
 
@@ -165,7 +175,7 @@ const EditNoSeri = () => {
     formState: { errors },
   } = useForm({
     resolver: yupResolver(schemaNoSeri),
-    context: { isEdit: false },
+    context: { isEdit: true },
     defaultValues: {
       no_seri: "",
       no_call: "",
@@ -186,6 +196,7 @@ const EditNoSeri = () => {
       saran: "",
       status_res: "",
       no_fd: "",
+      id_teknisi: "",
       rep_ke: 0,
       pic: null,
     },
@@ -228,8 +239,8 @@ const EditNoSeri = () => {
               displayValue(customer["d:Sell_to_Customer_No"])
             );
 
-            const dataInstalasi = await fetchDataInstalasi(
-              displayValue(customer["d:Serial_No"])
+            const dataArea = await fetchDataArea(
+              displayValue(customer["d:Sell_to_Customer_No"])
             );
 
             await fetchContRes(
@@ -343,6 +354,8 @@ const EditNoSeri = () => {
         return;
       }
 
+      const dataInstalasi = await fetchDataInstalasi(displayValue(data[0].id));
+
       setContract(data[0]);
     } catch (error) {
       console.error("Error fetching contract:", error);
@@ -350,13 +363,13 @@ const EditNoSeri = () => {
     }
   };
 
-  const fetchDataInstalasi = async (no_seri) => {
+  const fetchDataInstalasi = async (id_contract) => {
     try {
       const response = await axios.get(
         `${import.meta.env.VITE_API_URL}api/get-instalasi-lk`,
         {
           params: {
-            no_seri: no_seri,
+            id_contract: id_contract,
           },
         }
       );
@@ -375,19 +388,41 @@ const EditNoSeri = () => {
     }
   };
 
+  const fetchDataArea = async (no_cus) => {
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}api/get-area-lk`,
+        {
+          params: {
+            no_cus: no_cus,
+          },
+        }
+      );
+
+      const data = response.data;
+
+      if (data.length <= 0) {
+        setArea(null);
+        return;
+      }
+
+      setArea(data);
+      setTeknisi(data.teknisi);
+    } catch (error) {
+      console.error("Error fetching data area:", error);
+      showAlert("Gagal mengambil data area", "error");
+    }
+  };
+
   const onSubmit = async (values) => {
     setLoading(true);
 
     try {
       const data = new FormData();
 
-      // Always append the file
-      // data.append("pic", getValues("pic"));
-      data.append("created_by", 1);
-      data.append("type", 2);
-
       // Append all fields except special ones
       Object.entries(values).forEach(([key, value]) => {
+        console.log(key + " = " + value);
         if (
           ["waktu_call", "waktu_dtg", "waktu_mulai", "waktu_selesai"].includes(
             key
@@ -402,12 +437,9 @@ const EditNoSeri = () => {
         }
       });
 
-      const response = await axios.get(
-        import.meta.env.VITE_API_URL + `api/edit-flk?${id}`,
-        {
-          method: "POST",
-          body: data,
-        }
+      const response = await axios.post(
+        `${import.meta.env.VITE_API_URL}api/edit-flk?${id}`,
+        data
       );
 
       if (response.data.ok) {
@@ -435,8 +467,9 @@ const EditNoSeri = () => {
   };
 
   const onInvalid = (errors) => {
+    console.log(errors);
     showAlert(
-      "Terjadi kesalahan pada input data mohon check kembali.",
+      `Terjadi kesalahan pada input data mohon check kembali. ${errors}`,
       "error"
     );
   };
@@ -512,11 +545,19 @@ const EditNoSeri = () => {
                       {/* Row 2 */}
                       <Grid size={{ xs: 12, md: 6 }}>
                         <Grid>
-                          <Typography>Kode Area :</Typography>
-                          <Typography>Group :</Typography>
+                          <Typography>
+                            Kode Area : {displayValue(area?.kode_area)}
+                          </Typography>
+                          <Typography>
+                            Group : {displayValue(area?.groups)}
+                          </Typography>
                         </Grid>
-                        <Typography>Supervisor :</Typography>
-                        <Typography>Teknisi :</Typography>
+                        <Typography>
+                          Supervisor : {displayValue(area?.nama_spv)}
+                        </Typography>
+                        <Typography>
+                          Teknisi : {displayValue(area?.nama_teknisi)}
+                        </Typography>
                         <Typography>C.S.O :</Typography>
                       </Grid>
                     </Grid>
@@ -563,11 +604,11 @@ const EditNoSeri = () => {
                         </Typography>
                         <Typography>
                           Tanggal Kontrak :{" "}
-                          {displayValue(customer?.["d:Machine_Name"])}
+                          {displayFormatDate(contract?.tgl_contract_exp)}
                         </Typography>
                         <Typography>
                           Tipe Service :
-                          {displayValue(customer?.["d:Machine_Code"])}
+                          {displayFormatDate(contract?.type_service)}
                         </Typography>
                       </Grid>
 
@@ -632,6 +673,36 @@ const EditNoSeri = () => {
                           error={!!errors.no_fd}
                           helperText={errors.no_fd?.message}
                         />
+                      </Grid>
+
+                      <Grid size={{ xs: 12, md: 6 }}>
+                        <FormControl fullWidth required>
+                          <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
+                            Pilih Teknisi
+                          </Typography>
+                          <Controller
+                            name="id_teknisi"
+                            control={control}
+                            render={({ field }) => (
+                              <Select
+                                {...field}
+                                variant="outlined"
+                                displayEmpty
+                              >
+                                <MenuItem disabled value="">
+                                  <em>Pilih Teknisi</em>
+                                </MenuItem>
+                                {Object.entries(teknisi).map(
+                                  ([value, { name, id }]) => (
+                                    <MenuItem key={value} value={id}>
+                                      {name}
+                                    </MenuItem>
+                                  )
+                                )}
+                              </Select>
+                            )}
+                          />
+                        </FormControl>
                       </Grid>
                     </Grid>
                   </AccordionDetails>
