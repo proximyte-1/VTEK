@@ -65,8 +65,7 @@ const initDB = async () => {
 };
 
 // Upload path setup
-const uploadPath = "../client/src/uploads";
-const savePath = "/client/src/uploads";
+const uploadPath = "/client/src/uploads";
 const uploadUsersPath = path.join(__dirname, "../client/src/uploads/users");
 if (!fs.existsSync(uploadPath)) {
   fs.mkdirSync(uploadPath, { recursive: true });
@@ -614,7 +613,7 @@ app.post("/api/create-flk", upload.single("pic"), async (req, res) => {
   if (!file)
     return res.status(400).json({ ok: false, message: "File is required" });
 
-  const filePath = path.join(savePath, file.filename);
+  const filePath = path.join(uploadPath, file.filename);
   const {
     no_rep,
     no_seri,
@@ -835,12 +834,6 @@ app.post("/api/edit-flk", upload.single("pic"), async (req, res) => {
 
   let filePath;
 
-  if (file) {
-    filePath = path.join(savePath, file.filename);
-  } else {
-    filePath = fields.pic;
-  }
-
   const {
     no_rep,
     no_seri,
@@ -862,6 +855,13 @@ app.post("/api/edit-flk", upload.single("pic"), async (req, res) => {
     no_lap,
     id_teknisi,
   } = fields;
+
+  if (file) {
+    filePath = path.join(uploadPath, file.filename);
+    return res.status(400).json({ ok: false, message: "File is required" });
+  } else {
+    filePath = fields.pic;
+  }
 
   const transaction = new sql.Transaction(pool);
   try {
@@ -904,8 +904,6 @@ app.post("/api/edit-flk", upload.single("pic"), async (req, res) => {
     }
 
     query += ` WHERE id = ${id}`;
-
-    console.log(query);
 
     const execute = await request.query(query);
 
@@ -1097,7 +1095,7 @@ JOIN dbo.${process.env.TABLE_AREA} AS area ON cus.kode_area = area.kode_area ${w
 
 app.post("/api/export-data-teknisi", async (req, res) => {
   try {
-    const { dari, sampai, jenis, teknisi, kode_area, groups, no_cus, no_seri } =
+    const { dari, sampai, jenis, teknisi, kode_area, groups, no_cus } =
       req.body;
 
     const conditions = [];
@@ -1132,15 +1130,6 @@ app.post("/api/export-data-teknisi", async (req, res) => {
     if (groups) {
       conditions.push("area.groups = @groups");
       request.input("groups", groups);
-    }
-
-    if (no_cus) {
-      conditions.push("lk.no_cus = @no_cus");
-      request.input("no_cus", no_cus);
-    }
-    if (no_seri) {
-      conditions.push("lk.no_seri = @no_seri");
-      request.input("no_seri", no_seri);
     }
 
     const whereClause =
@@ -3331,7 +3320,7 @@ app.post("/api/edit-area", upload.none(), async (req, res) => {
             kode_area = '${item.kode_area}', 
             nama_area = '${item.nama_area}', 
             id_supervisor = '${id_supervisor}',
-            approver = '${id_approver}',
+            id_approver = '${id_approver}',
             id_teknisi = '${JSON.stringify(item.teknisi)}',
             updated_at = '${formatDateForSQL(now)}'
           WHERE id = '${item.id}'
@@ -3345,7 +3334,7 @@ app.post("/api/edit-area", upload.none(), async (req, res) => {
             nama_area, 
             groups, 
             id_supervisor, 
-            approver, 
+            id_approver, 
             id_teknisi,
             updated_at
           )

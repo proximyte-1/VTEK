@@ -356,11 +356,11 @@ const Report = () => {
             initialState={{
               pagination: {
                 paginationModel: {
-                  pageSize: 5,
+                  pageSize: 15,
                 },
               },
             }}
-            pageSizeOptions={[5]}
+            pageSizeOptions={[15]}
             checkboxSelection
             disableRowSelectionOnClick
           />

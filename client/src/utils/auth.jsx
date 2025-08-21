@@ -53,7 +53,7 @@ export const Auth = ({ children }) => {
 
         const updatedUser = {
           ...userData, // Start with all properties from userData
-          role: dbData?.role, // Add/overwrite role
+          role: JSON.parse(dbData?.role), // Add/overwrite role
           type: dbData?.type, // Add/overwrite type
           id_user: dbData?.id, // Add/overwrite id_user (renamed from dbData?.id)
         };

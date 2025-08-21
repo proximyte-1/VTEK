@@ -8,23 +8,15 @@ import {
   Alert,
   Box,
   CircularProgress,
-  Chip,
-  IconButton,
+  Stack,
 } from "@mui/material";
 import dayjs from "dayjs";
 import { DataGrid } from "@mui/x-data-grid";
-import { useAlert } from "../../../utils/alert";
 import axios from "axios";
+import { useAlert } from "../../../utils/alert";
 import { useAuth } from "../../../utils/auth";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import PauseCircleFilledIcon from "@mui/icons-material/PauseCircleFilled";
-import DangerousIcon from "@mui/icons-material/Dangerous";
-import VisibilityIcon from "@mui/icons-material/Visibility";
-import EditIcon from "@mui/icons-material/Edit";
-import GetAppIcon from "@mui/icons-material/GetApp";
-import { displayFormatDateTime } from "../../../utils/helpers";
 
-const NoNav = () => {
+const NoSeri = () => {
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -47,62 +39,27 @@ const NoNav = () => {
       },
     },
     {
-      field: "no_rep",
-      headerName: "No Report",
+      field: "no_seri",
+      headerName: "No Seri",
       flex: 1,
       minWidth: 150,
-      renderCell: (params) => `SPGFI${params.value}`,
     },
-    { field: "pelapor", headerName: "Nama Pelapor", flex: 1, minWidth: 150 },
+    { field: "pelapor", headerName: "Nama Pelapor", flex: 1 },
     {
       field: "waktu_mulai",
       headerName: "Waktu Mulai",
       flex: 1,
       minWidth: 150,
-      renderCell: (params) => displayFormatDateTime(params.value),
+      renderCell: (params) =>
+        params.value ? dayjs(params.value).format("DD-MM-YYYY HH:mm") : "-",
     },
     {
       field: "waktu_selesai",
       headerName: "Waktu Selesai",
       flex: 1,
       minWidth: 150,
-      renderCell: (params) => displayFormatDateTime(params.value),
-    },
-    {
-      field: "Status",
-      headerName: "Status",
-      flex: 0,
-      minWidth: 120,
-      renderCell: (params) => {
-        if (params.row.status_appr === 2) {
-          return (
-            <Chip
-              color="warning"
-              icon={<PauseCircleFilledIcon />}
-              label="Pending"
-              sx={{ width: "100%" }}
-            />
-          );
-        } else if (params.row.status_appr === 3) {
-          return (
-            <Chip
-              color="error"
-              icon={<DangerousIcon />}
-              label="Rejected"
-              sx={{ width: "100%" }}
-            />
-          );
-        } else {
-          return (
-            <Chip
-              color="success"
-              icon={<CheckCircleIcon />}
-              label="Approve"
-              sx={{ width: "100%" }}
-            />
-          );
-        }
-      },
+      renderCell: (params) =>
+        params.value ? dayjs(params.value).format("DD-MM-YYYY HH:mm") : "-",
     },
     {
       field: "actions",
@@ -111,36 +68,41 @@ const NoNav = () => {
       filterable: false,
       type: "actions",
       flex: 1, // Disables flex shrinking
-      width: 100,
-      minWidth: 100, // Fallback width
+      width: 300,
+      minWidth: 300, // Fallback width
       align: "center",
       renderCell: (params) => (
         <>
           {!user?.role?.includes(5) && !user?.role?.includes(6) && (
-            <IconButton
+            <Button
               variant="contained"
-              onClick={() => navigate(`view/id=${params.row.id}`)}
+              color="warning"
+              sx={{ marginX: 1 }}
+              onClick={() => navigate(`edit/id=${params.row.id}`)}
             >
-              <VisibilityIcon />
-            </IconButton>
+              Process
+            </Button>
           )}
 
           {!user?.role?.includes(5) && !user?.role?.includes(6) && (
-            <IconButton
+            <Button
               variant="contained"
+              color="warning"
+              sx={{ marginX: 1 }}
               onClick={() => navigate(`edit/id=${params.row.id}`)}
             >
-              <EditIcon />
-            </IconButton>
+              Edit
+            </Button>
           )}
 
-          <IconButton
+          <Button
             variant="contained"
+            color="secondary"
             onClick={() => handleExport(params.row.id)}
             disabled={loading}
           >
-            {loading ? <CircularProgress size={24} /> : <GetAppIcon />}
-          </IconButton>
+            {loading ? <CircularProgress size={24} /> : "Export"}
+          </Button>
         </>
       ),
     },
@@ -154,7 +116,7 @@ const NoNav = () => {
     const fetchDataFLK = async () => {
       try {
         const response = await axios.get(
-          import.meta.env.VITE_API_URL + `api/get-flk-norep`
+          import.meta.env.VITE_API_URL + `api/get-flk-noseri`
         );
 
         const data = response.data;
@@ -178,7 +140,7 @@ const NoNav = () => {
       const data = datas.find(({ id }) => id == lk_id);
 
       const response = await fetch(
-        import.meta.env.VITE_API_URL + `api/export-lk-norep`,
+        import.meta.env.VITE_API_URL + `api/export-lk-noseri`,
         {
           method: "POST",
           headers: {
@@ -186,7 +148,7 @@ const NoNav = () => {
           },
           body: JSON.stringify({
             data: data,
-            reportTitle: `Report Laporan Kerja - Dengan Barang`,
+            reportTitle: `Report Laporan Kerja - Tanpa Barang`,
           }),
         }
       );
@@ -197,7 +159,7 @@ const NoNav = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `Report Satuan - Dengan Barang ${dayjs().format(
+      link.download = `Report Satuan - Tanpa Barang ${dayjs().format(
         "DD-MM-YYYY"
       )}.xlsx`;
       document.body.appendChild(link);
@@ -214,24 +176,25 @@ const NoNav = () => {
   return (
     <Container>
       <Typography variant="h4" gutterBottom>
-        Laporan Kerja - Dengan Barang
+        Laporan Kerja - Tanpa Barang
       </Typography>
       <Box sx={{ width: "100%", overflowX: "auto" }}>
-        <DataGrid
-          rows={datas}
-          columns={columns}
-          columnBufferPx={columns.length} // Render all columns off-screen
-          getRowId={(row) => row.id}
-          initialState={{
-            pagination: {
-              paginationModel: {
-                pageSize: 15,
+        <Box>
+          <DataGrid
+            rows={datas}
+            columns={columns}
+            getRowId={(row) => row.id}
+            initialState={{
+              pagination: {
+                paginationModel: {
+                  pageSize: 15,
+                },
               },
-            },
-          }}
-          pageSizeOptions={[15]}
-          disableRowSelectionOnClick
-        />
+            }}
+            pageSizeOptions={[15]}
+            disableRowSelectionOnClick
+          />
+        </Box>
       </Box>
 
       {/* Link to Form Page */}
@@ -267,4 +230,4 @@ const NoNav = () => {
   );
 };
 
-export default NoNav;
+export default NoSeri;

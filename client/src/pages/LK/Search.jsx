@@ -143,8 +143,17 @@ const Search = () => {
       showAlert("No. Seri belum dipilih.", "error");
       return;
     }
-    const no_seri = displayValue(selected);
-    navigate("/flk-no-barang/add", { state: { initialNoSeri: no_seri } });
+    const no_seri = displayValue(selected?.["d:Serial_No"]);
+    const no_cus = displayValue(selected?.["d:Sell_to_Customer_No"]);
+
+    navigate("/flk-no-barang/add", {
+      state: {
+        initialData: {
+          no_seri: no_seri,
+          no_cus: no_cus,
+        },
+      },
+    });
   };
 
   return (
@@ -172,7 +181,6 @@ const Search = () => {
               <Button
                 variant="contained"
                 color="primary"
-                style={{ marginTop: "20px" }}
                 onClick={handleSeachCustomer}
               >
                 {loading ? (
@@ -194,13 +202,13 @@ const Search = () => {
             initialState={{
               pagination: {
                 paginationModel: {
-                  pageSize: 5,
+                  pageSize: 15,
                 },
               },
             }}
-            pageSizeOptions={[5]}
+            pageSizeOptions={[15]}
             onRowClick={(params) => {
-              setSelected(params.row["d:Serial_No"]);
+              setSelected(params.row);
               console.log("Row clicked:", params.row);
             }}
           />

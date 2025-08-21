@@ -40,7 +40,11 @@ import FileUpload from "../../../components/FileUpload/FileUpload";
 import { useAlert } from "../../../utils/alert";
 import * as yup from "yup";
 import axios from "axios";
-import { displayFormatDate, displayValue } from "../../../utils/helpers";
+import {
+  displayFormatDate,
+  displayFormatDateTime,
+  displayValue,
+} from "../../../utils/helpers";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { Controller, useForm } from "react-hook-form";
 import {
@@ -63,6 +67,7 @@ const EditNoSeri = () => {
   const [customer, setDataCustomer] = useState([]);
   const [searched, setSearched] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [init_loading, setInitLoading] = useState(true);
   const [lastService, setLastService] = useState([]);
   const [contract, setContract] = useState([]);
   const [instalasi, setInstalasi] = useState([]);
@@ -210,6 +215,15 @@ const EditNoSeri = () => {
         );
         const datas = response.data[0];
 
+        // if (!datas.status_appr === 2) {
+        //   navigate("/flk", {
+        //     state: {
+        //       message: "Data telah di proses tidak dapat diubah !",
+        //       severity: "warning",
+        //     },
+        //   });
+        // }
+
         if (datas && datas.no_seri) {
           Object.entries(datas).forEach(([key, value]) => {
             let parsedValue = value;
@@ -222,7 +236,9 @@ const EditNoSeri = () => {
                 "waktu_selesai",
               ].includes(key)
             ) {
-              parsedValue = value ? new Date(value) : null;
+              parsedValue = value
+                ? new Date(displayFormatDateTime(value))
+                : null;
             }
 
             setValue(key, parsedValue, { shouldDirty: true });
@@ -259,6 +275,8 @@ const EditNoSeri = () => {
       } catch (error) {
         console.error("Fetch failed:", error);
         showAlert("Gagal mendapat data laporan.", "error");
+      } finally {
+        setInitLoading(false);
       }
     };
 
@@ -274,7 +292,7 @@ const EditNoSeri = () => {
   const fetchDataCustomer = async (no_seri) => {
     try {
       const fetch_customer = await axios.get(
-        import.meta.env.VITE_API_URL + `api/nav-data-noseri?id=${no_seri}`
+        import.meta.env.VITE_API_URL + `api/nav-data-noseri?no_seri=${no_seri}`
       );
       const data = fetch_customer.data;
 
@@ -478,6 +496,20 @@ const EditNoSeri = () => {
   const theme = useTheme();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down("sm"));
 
+  if (init_loading) {
+    return (
+      <Paper
+        sx={{
+          padding: 3,
+          marginBottom: 5,
+        }}
+        elevation={4}
+      >
+        <CircularProgress />
+      </Paper>
+    );
+  }
+
   return (
     <Paper sx={{ padding: 3, marginBottom: 5 }} elevation={4}>
       <Typography variant="h5" marginBottom={"1.5em"} gutterBottom>
@@ -558,7 +590,6 @@ const EditNoSeri = () => {
                         <Typography>
                           Teknisi : {displayValue(area?.nama_teknisi)}
                         </Typography>
-                        <Typography>C.S.O :</Typography>
                       </Grid>
                     </Grid>
                   </AccordionDetails>
@@ -607,8 +638,7 @@ const EditNoSeri = () => {
                           {displayFormatDate(contract?.tgl_contract_exp)}
                         </Typography>
                         <Typography>
-                          Tipe Service :
-                          {displayFormatDate(contract?.type_service)}
+                          Tipe Service :{displayValue(contract?.type_service)}
                         </Typography>
                       </Grid>
 

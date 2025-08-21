@@ -344,6 +344,8 @@ const AddNoNav = () => {
 
       const data = response.data;
 
+      console.log(data);
+
       if (data.length <= 0) {
         setContract(null);
         return;
@@ -476,9 +478,7 @@ const AddNoNav = () => {
       });
 
       data.append("created_by", user?.id_user || "0");
-      // if (user) {
-      //   data.append("created_by", user?.id_user || "0");
-      // }
+      data.append("status_appr", "2");
 
       // Submit main form
       const response = await axios.post(
@@ -505,7 +505,18 @@ const AddNoNav = () => {
         barangPayload
       );
 
-      if (barangResponse.status === 200) {
+      const apprPayload = {
+        id_lk: reportId,
+        id_area: area.id_area || 0,
+        approved: 2,
+      };
+
+      const apprResponse = await axios.post(
+        `${import.meta.env.VITE_API_URL}api/create-approval`,
+        apprPayload
+      );
+
+      if (apprResponse.data.ok && barangResponse.data.ok) {
         setRetry(false);
         navigate("/flk", {
           state: {
@@ -1344,11 +1355,11 @@ const AddNoNav = () => {
                           initialState={{
                             pagination: {
                               paginationModel: {
-                                pageSize: 5,
+                                pageSize: 15,
                               },
                             },
                           }}
-                          pageSizeOptions={[5]}
+                          pageSizeOptions={[15]}
                           disableRowSelectionOnClick
                         />
                       </Box>

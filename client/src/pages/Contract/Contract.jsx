@@ -7,12 +7,15 @@ import {
   Snackbar,
   Alert,
   Box,
+  IconButton,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import axios from "axios";
 import { useAlert } from "../../utils/alert";
 import { Margin } from "@mui/icons-material";
 import dayjs from "dayjs";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import EditIcon from "@mui/icons-material/Edit";
 
 const Contract = () => {
   const location = useLocation();
@@ -46,23 +49,21 @@ const Contract = () => {
       align: "center",
       renderCell: (params) => (
         <>
-          <Button
+          <IconButton
             variant="contained"
-            color="warning"
-            sx={{ marginRight: 0.5 }}
-            onClick={() => navigate(`edit/${params.row.id}`)}
-          >
-            Edit
-          </Button>
-
-          <Button
-            variant="contained"
-            color="info"
-            sx={{ marginRight: 0.5 }}
+            sx={{ marginX: 0.5 }}
             onClick={() => navigate(`view/${params.row.id}`)}
           >
-            View
-          </Button>
+            <VisibilityIcon />
+          </IconButton>
+
+          <IconButton
+            variant="contained"
+            sx={{ marginX: 0.5 }}
+            onClick={() => navigate(`edit/${params.row.id}`)}
+          >
+            <EditIcon />
+          </IconButton>
         </>
       ),
     },
@@ -106,11 +107,11 @@ const Contract = () => {
             initialState={{
               pagination: {
                 paginationModel: {
-                  pageSize: 5,
+                  pageSize: 15,
                 },
               },
             }}
-            pageSizeOptions={[5]}
+            pageSizeOptions={[15]}
             disableRowSelectionOnClick
           />
         </Box>
@@ -120,7 +121,7 @@ const Contract = () => {
       <Button
         variant="contained"
         color="primary"
-        style={{ marginTop: "20px" }}
+        style={{ marginTop: "20px", marginBottom: "20px" }}
         onClick={() => navigate(`add`)}
       >
         New Data

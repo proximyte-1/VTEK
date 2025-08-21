@@ -8,15 +8,34 @@ import {
   Alert,
   Box,
   CircularProgress,
+  Stack,
+  Chip,
+  IconButton,
 } from "@mui/material";
 import dayjs from "dayjs";
 import { DataGrid } from "@mui/x-data-grid";
 import axios from "axios";
 import { useAlert } from "../../../utils/alert";
+import { useAuth } from "../../../utils/auth";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import PauseCircleFilledIcon from "@mui/icons-material/PauseCircleFilled";
+import DangerousIcon from "@mui/icons-material/Dangerous";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import EditIcon from "@mui/icons-material/Edit";
+import GetAppIcon from "@mui/icons-material/GetApp";
+import { displayFormatDateTime } from "../../../utils/helpers";
 
 const NoSeri = () => {
   const location = useLocation();
   const navigate = useNavigate();
+
+  const { user } = useAuth();
+
+  useEffect(() => {
+    // use for role checking
+    if (user?.role?.includes(3) || user?.role?.includes(4)) {
+    }
+  }, [user]);
 
   const columns = [
     {
@@ -31,53 +50,97 @@ const NoSeri = () => {
     {
       field: "no_seri",
       headerName: "No Seri",
-      flex: 1,
+      flex: 0,
       minWidth: 150,
     },
     { field: "pelapor", headerName: "Nama Pelapor", flex: 1 },
     {
       field: "waktu_mulai",
       headerName: "Waktu Mulai",
-      flex: 1,
+      flex: 0,
       minWidth: 150,
-      renderCell: (params) =>
-        params.value ? dayjs(params.value).format("DD-MM-YYYY HH:mm") : "-",
+      renderCell: (params) => displayFormatDateTime(params.value),
     },
     {
       field: "waktu_selesai",
       headerName: "Waktu Selesai",
-      flex: 1,
+      flex: 0,
       minWidth: 150,
-      renderCell: (params) =>
-        params.value ? dayjs(params.value).format("DD-MM-YYYY HH:mm") : "-",
+      renderCell: (params) => displayFormatDateTime(params.value),
+    },
+    {
+      field: "Status",
+      headerName: "Status",
+      flex: 0,
+      minWidth: 120,
+      renderCell: (params) => {
+        if (params.row.status_appr === 2) {
+          return (
+            <Chip
+              color="warning"
+              icon={<PauseCircleFilledIcon />}
+              label="Pending"
+              sx={{ width: "100%" }}
+            />
+          );
+        } else if (params.row.status_appr === 3) {
+          return (
+            <Chip
+              color="error"
+              icon={<DangerousIcon />}
+              label="Rejected"
+              sx={{ width: "100%" }}
+            />
+          );
+        } else {
+          return (
+            <Chip
+              color="success"
+              icon={<CheckCircleIcon />}
+              label="Approve"
+              sx={{ width: "100%" }}
+            />
+          );
+        }
+      },
     },
     {
       field: "actions",
       headerName: "Actions",
       sortable: false,
       filterable: false,
-      flex: 0, // Disables flex shrinking
-      minWidth: 200, // Fallback width
+      type: "actions",
+      flex: 1, // Disables flex shrinking
+      width: 100,
+      minWidth: 100, // Fallback width
       align: "center",
       renderCell: (params) => (
         <>
-          <Button
-            variant="contained"
-            color="warning"
-            sx={{ marginX: 1 }}
-            onClick={() => navigate(`edit/id=${params.row.id}`)}
-          >
-            Edit
-          </Button>
+          {!user?.role?.includes(5) && !user?.role?.includes(6) && (
+            <IconButton
+              variant="contained"
+              onClick={() => navigate(`view/id=${params.row.id}`)}
+            >
+              <VisibilityIcon />
+            </IconButton>
+          )}
 
-          <Button
+          {!user?.role?.includes(5) && !user?.role?.includes(6) && (
+            <IconButton
+              variant="contained"
+              onClick={() => navigate(`edit/id=${params.row.id}`)}
+            >
+              <EditIcon />
+            </IconButton>
+          )}
+
+          <IconButton
             variant="contained"
-            color="secondary"
             onClick={() => handleExport(params.row.id)}
             disabled={loading}
           >
-            {loading ? <CircularProgress size={24} /> : "Export"}
-          </Button>
+            {loading ? <CircularProgress size={24} /> : <GetAppIcon />}
+          </IconButton>
         </>
       ),
     },
@@ -154,7 +217,7 @@ const NoSeri = () => {
         Laporan Kerja - Tanpa Barang
       </Typography>
       <Box sx={{ width: "100%", overflowX: "auto" }}>
-        <Box sx={{ minWidth: 700 }}>
+        <Box>
           <DataGrid
             rows={datas}
             columns={columns}
@@ -162,26 +225,27 @@ const NoSeri = () => {
             initialState={{
               pagination: {
                 paginationModel: {
-                  pageSize: 5,
+                  pageSize: 15,
                 },
               },
             }}
-            pageSizeOptions={[5]}
-            checkboxSelection
+            pageSizeOptions={[15]}
             disableRowSelectionOnClick
           />
         </Box>
       </Box>
 
       {/* Link to Form Page */}
-      <Button
-        variant="contained"
-        color="primary"
-        style={{ marginTop: "20px" }}
-        onClick={() => navigate(`add`)}
-      >
-        New Data
-      </Button>
+      {!user?.role?.includes(5) && !user?.role?.includes(6) && (
+        <Button
+          variant="contained"
+          color="primary"
+          style={{ marginTop: "20px", marginBottom: "20px" }}
+          onClick={() => navigate(`add`)}
+        >
+          New Data
+        </Button>
+      )}
 
       {/* Alert notifications */}
       <Snackbar

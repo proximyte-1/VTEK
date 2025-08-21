@@ -110,7 +110,7 @@ const Instalasi = () => {
       <Button
         variant="contained"
         color="primary"
-        style={{ marginTop: "20px" }}
+        style={{ marginTop: "20px", marginBottom: "20px" }}
         onClick={() => navigate(`add`)}
       >
         New Data

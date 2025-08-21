@@ -7,12 +7,14 @@ import {
   Snackbar,
   Alert,
   Box,
+  IconButton,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import axios from "axios";
 import { useAlert } from "../../utils/alert";
 import { Margin } from "@mui/icons-material";
 import dayjs from "dayjs";
+import EditIcon from "@mui/icons-material/Edit";
 
 const Customer = () => {
   const location = useLocation();
@@ -39,14 +41,13 @@ const Customer = () => {
       align: "center",
       renderCell: (params) => (
         <>
-          <Button
+          <IconButton
             variant="contained"
-            color="warning"
-            sx={{ marginRight: 0.5 }}
+            sx={{ marginX: 0.5 }}
             onClick={() => navigate(`edit/${params.row.id}`)}
           >
-            Edit
-          </Button>
+            <EditIcon />
+          </IconButton>
         </>
       ),
     },
@@ -90,11 +91,11 @@ const Customer = () => {
             initialState={{
               pagination: {
                 paginationModel: {
-                  pageSize: 5,
+                  pageSize: 15,
                 },
               },
             }}
-            pageSizeOptions={[5]}
+            pageSizeOptions={[15]}
             disableRowSelectionOnClick
           />
         </Box>
@@ -104,7 +105,7 @@ const Customer = () => {
       <Button
         variant="contained"
         color="primary"
-        style={{ marginTop: "20px" }}
+        style={{ marginTop: "20px", marginBottom: "20px" }}
         onClick={() => navigate(`add`)}
       >
         New Data

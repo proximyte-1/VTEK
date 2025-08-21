@@ -87,7 +87,6 @@ const AddCustomer = () => {
           .then((res) => {
             if (res.data && Array.isArray(res.data) && res.data.length > 0) {
               // Store the array of objects directly
-              console.log(res.data);
               setIdCustomer(res.data);
             } else {
               setIdCustomer([]);

@@ -39,6 +39,7 @@ import { yupResolver } from "@hookform/resolvers/yup";
 import {
   columnsBarang,
   displayFormatDate,
+  displayFormatDateTime,
   displayValue,
 } from "../../../utils/helpers";
 import {
@@ -61,6 +62,7 @@ const EditNoNav = () => {
   const [customer, setDataCustomer] = useState([]);
   const [searched, setSearched] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [init_loading, setInitLoading] = useState(true);
   const [expand, setExpand] = useState(true);
   const [lastService, setLastService] = useState([]);
   const [contract, setContract] = useState([]);
@@ -214,6 +216,15 @@ const EditNoNav = () => {
         );
         const datas = response.data[0];
 
+        // if (!datas.status_appr === 2) {
+        //   navigate("/flk", {
+        //     state: {
+        //       message: "Data telah di proses tidak dapat diubah !",
+        //       severity: "warning",
+        //     },
+        //   });
+        // }
+
         if (datas && datas.no_rep) {
           Object.entries(datas).forEach(([key, value]) => {
             let parsedValue = value;
@@ -226,7 +237,9 @@ const EditNoNav = () => {
                 "waktu_selesai",
               ].includes(key)
             ) {
-              parsedValue = value ? new Date(value) : null;
+              parsedValue = value
+                ? new Date(displayFormatDateTime(value))
+                : null;
             }
 
             setValue(key, parsedValue, { shouldDirty: true });
@@ -258,6 +271,8 @@ const EditNoNav = () => {
       } catch (error) {
         console.error("Fetch failed:", error);
         showAlert("Gagal mendapat data laporan.", "error");
+      } finally {
+        setInitLoading(false);
       }
     };
 
@@ -465,6 +480,14 @@ const EditNoNav = () => {
   const theme = useTheme();
   const isSmallScreen = useMediaQuery(theme.breakpoints.down("sm"));
 
+  if (init_loading) {
+    return (
+      <Paper sx={{ padding: 3, marginBottom: 5 }} elevation={4}>
+        <CircularProgress />
+      </Paper>
+    );
+  }
+
   return (
     <Paper sx={{ padding: 3, marginBottom: 5 }} elevation={4}>
       <Typography variant="h5" marginBottom={"1.5em"} gutterBottom>
@@ -602,8 +625,7 @@ const EditNoNav = () => {
                           {displayFormatDate(contract?.tgl_contract_exp)}
                         </Typography>
                         <Typography>
-                          Tipe Service :{" "}
-                          {displayFormatDate(contract?.type_service)}
+                          Tipe Service : {displayValue(contract?.type_service)}
                         </Typography>
                       </Grid>
 
@@ -1195,11 +1217,11 @@ const EditNoNav = () => {
                           initialState={{
                             pagination: {
                               paginationModel: {
-                                pageSize: 5,
+                                pageSize: 15,
                               },
                             },
                           }}
-                          pageSizeOptions={[5]}
+                          pageSizeOptions={[15]}
                           disableRowSelectionOnClick
                         />
                       </Box>

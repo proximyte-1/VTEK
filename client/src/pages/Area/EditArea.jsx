@@ -38,6 +38,7 @@ const EditArea = () => {
   const [loading, setLoading] = useState(false);
   const [dataUser, setDataUser] = useState([]);
   const [dataSPV, setDataSPV] = useState([]);
+  const [dataApprover, setDataApprover] = useState([]);
   const [retry, setRetry] = useState(false);
 
   const schema = useMemo(() => {
@@ -58,6 +59,7 @@ const EditArea = () => {
         .min(1, "Minimal 1 area di masukkan."),
       groups: yup.string().required(),
       id_supervisor: yup.array().required(),
+      id_approver: yup.array().required(),
     });
   }, []);
 
@@ -77,6 +79,7 @@ const EditArea = () => {
       kode_area: [],
       groups: "",
       id_supervisor: [],
+      id_approver: [],
     },
   });
 
@@ -89,32 +92,48 @@ const EditArea = () => {
 
         const data = response.data;
 
-        const transformedData = data.map((item) => {
-          // Use JSON.parse to convert the stringified arrays into real JavaScript arrays.
-          const teknisi = JSON.parse(item.id_teknisi);
+        if (Array.isArray(data) && data.length > 0) {
+          const firstItem = data[0];
 
-          // A simple way to generate a unique ID.
-          const uniqueId = Date.now().toString();
+          setValue("groups", firstItem.groups, { shouldDirty: true });
 
-          return {
-            kode_area: item.kode_area,
-            nama_area: item.nama_area,
-            teknisi: teknisi,
-            id: uniqueId,
-          };
-        });
-
-        console.log(transformedData);
-
-        Object.entries(data).forEach(([key, value]) => {
-          if (key === "kode_area") {
-            setValue(key, transformedData, { shouldDirty: true });
-          } else if (key === "id_supervisor") {
-            setValue(key, JSON.parse(value), { shouldDirty: true });
-          } else {
-            setValue(key, value, { shouldDirty: true });
+          try {
+            const parsedSupervisors = JSON.parse(firstItem.id_supervisor);
+            setValue("id_supervisor", parsedSupervisors, { shouldDirty: true });
+          } catch (e) {
+            console.error("Failed to parse id_supervisor:", e);
+            setValue("id_supervisor", [], { shouldDirty: true });
           }
-        });
+
+          try {
+            const parsedApprovers = JSON.parse(firstItem.approver);
+            setValue("id_approver", parsedApprovers, { shouldDirty: true });
+          } catch (e) {
+            console.error("Failed to parse id_approver:", e);
+            setValue("id_approver", [], { shouldDirty: true });
+          }
+
+          const transformedData = data.map((item) => {
+            let parsedTeknisi = [];
+            try {
+              parsedTeknisi = JSON.parse(item.id_teknisi);
+            } catch (e) {
+              console.error(
+                `Failed to parse id_teknisi for item ${item.id}:`,
+                e
+              );
+            }
+
+            return {
+              id: item.id,
+              kode_area: item.kode_area,
+              nama_area: item.nama_area,
+              teknisi: parsedTeknisi,
+            };
+          });
+
+          setValue("kode_area", transformedData, { shouldDirty: true });
+        }
       } catch (err) {
         console.error("No data found or is missing");
         showAlert("Gagal mendapat data instalasi tidak ditemukan.", "error");
@@ -155,9 +174,28 @@ const EditArea = () => {
       }
     };
 
+    const getApproverData = () => {
+      try {
+        axios
+          .get(`${import.meta.env.VITE_API_URL}api/get-approver`)
+          .then((res) => {
+            if (res.data.length >= 0) {
+              const data = res.data;
+              setDataApprover(data);
+            } else {
+              showAlert("Data user approver belum ada.", "error");
+            }
+          });
+      } catch (err) {
+        console.error("Terjadi kesalahan saat memanggil data: ", err);
+        showAlert("Terjadi kesalahan saat memanggil data", "error");
+      }
+    };
+
     fetchAreaById();
     getUserData();
     getSPVData();
+    getApproverData();
   }, []);
 
   const onSubmit = async (values) => {
@@ -169,7 +207,7 @@ const EditArea = () => {
       Object.entries(values).forEach(([key, value]) => {
         if (key === "kode_area") {
           data.append(key, JSON.stringify(value));
-        } else if (key === "id_supervisor") {
+        } else if (key === "id_supervisor" || key === "id_approver") {
           data.append(key, JSON.stringify(value));
         } else {
           data.append(key, value);
@@ -269,6 +307,53 @@ const EditArea = () => {
                         // The value prop must be an array of objects
                         value={
                           dataSPV.filter((option) =>
+                            field.value?.includes(option.id)
+                          ) || []
+                        }
+                        filterSelectedOptions
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            variant="outlined"
+                            fullWidth
+                            error={!!error}
+                            helperText={error ? error.message : null}
+                          />
+                        )}
+                      />
+                    </>
+                  )}
+                />
+              </Grid>
+            )}
+
+            {dataApprover && (
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Controller
+                  name="id_approver"
+                  control={control}
+                  rules={{ required: "Approver is required" }}
+                  render={({ field, fieldState: { error } }) => (
+                    <>
+                      <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
+                        Pilih Approver
+                      </Typography>
+                      <Autocomplete
+                        {...field}
+                        multiple
+                        id="approver-autocomplete"
+                        options={dataApprover || []}
+                        getOptionLabel={(option) => option.name || ""}
+                        isOptionEqualToValue={(option, value) =>
+                          option.id === value.id
+                        }
+                        onChange={(event, newValue) => {
+                          // Pass an array of IDs to the form state
+                          field.onChange(newValue.map((option) => option.id));
+                        }}
+                        // The value prop must be an array of objects
+                        value={
+                          dataApprover.filter((option) =>
                             field.value?.includes(option.id)
                           ) || []
                         }

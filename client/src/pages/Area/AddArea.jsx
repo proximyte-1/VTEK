@@ -37,6 +37,7 @@ const AddArea = () => {
   const [loading, setLoading] = useState(false);
   const [dataUser, setDataUser] = useState([]);
   const [dataSPV, setDataSPV] = useState([]);
+  const [dataApprover, setDataApprover] = useState([]);
   const [retry, setRetry] = useState(false);
 
   const schema = useMemo(() => {
@@ -58,6 +59,7 @@ const AddArea = () => {
         .min(1, "Minimal 1 area di masukkan."),
       groups: yup.string().required(),
       id_supervisor: yup.array().required(),
+      id_approver: yup.array().required(),
     });
   }, []);
 
@@ -77,6 +79,7 @@ const AddArea = () => {
       kode_area: [],
       groups: "",
       id_supervisor: [],
+      id_approver: [],
     },
   });
 
@@ -115,8 +118,27 @@ const AddArea = () => {
       }
     };
 
+    const getApproverData = () => {
+      try {
+        axios
+          .get(`${import.meta.env.VITE_API_URL}api/get-approver`)
+          .then((res) => {
+            if (res.data.length >= 0) {
+              const data = res.data;
+              setDataApprover(data);
+            } else {
+              showAlert("Data user approver belum ada.", "error");
+            }
+          });
+      } catch (err) {
+        console.error("Terjadi kesalahan saat memanggil data: ", err);
+        showAlert("Terjadi kesalahan saat memanggil data", "error");
+      }
+    };
+
     getUserData();
     getSPVData();
+    getApproverData();
   }, []);
 
   const onSubmit = async (values) => {
@@ -128,17 +150,12 @@ const AddArea = () => {
       Object.entries(values).forEach(([key, value]) => {
         if (key === "kode_area") {
           data.append(key, JSON.stringify(value));
-          console.log(key + " = " + JSON.stringify(value));
-        } else if (key === "id_supervisor") {
+        } else if (key === "id_supervisor" || key === "id_approver") {
           data.append(key, JSON.stringify(value));
-          console.log(key + " = " + JSON.stringify(value));
         } else {
           data.append(key, value);
-          console.log(key + " = " + value);
         }
       });
-
-      return;
 
       // Submit main form
       const response = await axios.post(
@@ -231,6 +248,53 @@ const AddArea = () => {
                         // The value prop must be an array of objects
                         value={
                           dataSPV.filter((option) =>
+                            field.value?.includes(option.id)
+                          ) || []
+                        }
+                        filterSelectedOptions
+                        renderInput={(params) => (
+                          <TextField
+                            {...params}
+                            variant="outlined"
+                            fullWidth
+                            error={!!error}
+                            helperText={error ? error.message : null}
+                          />
+                        )}
+                      />
+                    </>
+                  )}
+                />
+              </Grid>
+            )}
+
+            {dataApprover && (
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Controller
+                  name="id_approver"
+                  control={control}
+                  rules={{ required: "Approver is required" }}
+                  render={({ field, fieldState: { error } }) => (
+                    <>
+                      <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
+                        Pilih Approver
+                      </Typography>
+                      <Autocomplete
+                        {...field}
+                        multiple
+                        id="approver-autocomplete"
+                        options={dataApprover || []}
+                        getOptionLabel={(option) => option.name || ""}
+                        isOptionEqualToValue={(option, value) =>
+                          option.id === value.id
+                        }
+                        onChange={(event, newValue) => {
+                          // Pass an array of IDs to the form state
+                          field.onChange(newValue.map((option) => option.id));
+                        }}
+                        // The value prop must be an array of objects
+                        value={
+                          dataApprover.filter((option) =>
                             field.value?.includes(option.id)
                           ) || []
                         }

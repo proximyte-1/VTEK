@@ -37,6 +37,7 @@ import PeriodeReport from "./pages/Report/PeriodeReport";
 import AreaReport from "./pages/Report/AreaReport";
 import CustomerReport from "./pages/Report/CustomerReport";
 import TeknisiReport from "./pages/Report/TeknisiReport";
+import ViewLK from "./pages/LK/ViewLK";
 
 function App() {
   return (
@@ -50,6 +51,7 @@ function App() {
               <Route index element={<NoNav />} />
               <Route path="add" element={<AddNoNav />} />
               <Route path="search" element={<Search />} />
+              <Route path="view/:id" element={<ViewLK />} />
               <Route path="edit/:id" element={<EditNoNav />} />
             </Route>
 
@@ -58,6 +60,7 @@ function App() {
               <Route index element={<NoSeri />} />
               <Route path="add" element={<AddNoSeri />} />
               <Route path="search" element={<Search />} />
+              <Route path="view/:id" element={<ViewLK />} />
               <Route path="edit/:id" element={<EditNoSeri />} />
             </Route>
 
@@ -111,6 +114,7 @@ function App() {
             <Route path="settings" element={<AdminSettings />} />
           </Route> */}
 
+            <Route path="report" element={<TeknisiReport />} />
             <Route path="report-periode" element={<PeriodeReport />} />
             <Route path="report-area" element={<AreaReport />} />
             <Route path="report-customer" element={<CustomerReport />} />

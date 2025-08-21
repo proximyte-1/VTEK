@@ -25,10 +25,25 @@ import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import axios from "axios";
 import { selectRole, selectType } from "../../utils/constants";
+import { useAuth } from "../../utils/auth";
 
 const EditUsers = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+
+  const { user } = useAuth();
+
+  useEffect(() => {
+    // use for role checking
+    if (!user?.role?.includes(3) && !user?.role?.includes(4)) {
+      navigate("/home", {
+        state: {
+          message: "Role Anda Bukan Admin!",
+          severity: "error",
+        },
+      });
+    }
+  }, [user]);
 
   const {
     register,

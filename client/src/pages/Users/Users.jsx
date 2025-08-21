@@ -7,15 +7,32 @@ import {
   Snackbar,
   Alert,
   Box,
+  IconButton,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import axios from "axios";
 import { useAlert } from "../../utils/alert";
 import { Margin } from "@mui/icons-material";
+import { useAuth } from "../../utils/auth";
+import EditIcon from "@mui/icons-material/Edit";
 
 const Users = () => {
   const location = useLocation();
   const navigate = useNavigate();
+
+  const { user } = useAuth();
+
+  useEffect(() => {
+    // use for role checking
+    if (!user?.role?.includes(3) && !user?.role?.includes(4)) {
+      navigate("/", {
+        state: {
+          message: "Role Anda Bukan Admin!",
+          severity: "error",
+        },
+      });
+    }
+  }, [user]);
 
   const columns = [
     {
@@ -37,22 +54,13 @@ const Users = () => {
       align: "center",
       renderCell: (params) => (
         <>
-          <Button
+          <IconButton
             variant="contained"
-            color="warning"
-            sx={{ marginRight: 0.5 }}
+            sx={{ marginX: 0.5 }}
             onClick={() => navigate(`edit/id=${params.row.id}`)}
           >
-            Edit
-          </Button>
-          {/* <Button
-            variant="contained"
-            color="error"
-            sx={{ marginLeft: 0.5 }}
-            onClick={() => resetPass(params.row.id)}
-          >
-            Reset Password
-          </Button> */}
+            <EditIcon />
+          </IconButton>
         </>
       ),
     },
@@ -111,11 +119,11 @@ const Users = () => {
             initialState={{
               pagination: {
                 paginationModel: {
-                  pageSize: 5,
+                  pageSize: 15,
                 },
               },
             }}
-            pageSizeOptions={[5]}
+            pageSizeOptions={[15]}
             disableRowSelectionOnClick
           />
         </Box>
@@ -125,7 +133,7 @@ const Users = () => {
       <Button
         variant="contained"
         color="primary"
-        style={{ marginTop: "20px" }}
+        style={{ marginTop: "20px", marginBottom: "20px" }}
         onClick={() => navigate(`add`)}
       >
         New Data

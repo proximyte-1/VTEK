@@ -116,7 +116,7 @@ const EditContract = () => {
           let parsedValue = value;
 
           if (["tgl_contract", "tgl_contract_exp"].includes(key)) {
-            parsedValue = value ? new Date(value) : null;
+            parsedValue = value ? new Date(displayFormatDateTime(value)) : null;
           }
           setValue(key, parsedValue, { shouldDirty: true });
         });

@@ -22,7 +22,7 @@ const pages = [
   { endpoint: "master", name: "Master" },
   { endpoint: "flk", name: "Laporan Kerja" },
   { endpoint: "report", name: "Report" },
-  { endpoint: "login", name: "User" },
+  { endpoint: "login", name: "User Data" },
 ];
 const settings = [
   { endpoint: "/profile", name: "Profile" },
@@ -35,7 +35,6 @@ const menu_flk = [
 ];
 
 const menu_master = [
-  { name: "User", endpoint: "/users" },
   { name: "Kontrak", endpoint: "/contract" },
   { name: "Area", endpoint: "/area" },
   { name: "Customer", endpoint: "/customer" },
@@ -57,21 +56,20 @@ function Navbar() {
   const [anchorElMaster, setAnchorElMaster] = useState(null);
   const [anchorElReport, setAnchorElReport] = useState(null);
   const [openSubMenu, setOpenSubMenu] = useState(false);
+  const [menuMaster, setMenuMaster] = useState(menu_master);
 
   // Destructure authentication state and functions from the context
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
-  // useEffect(() => {
-  //   console.log("User object in component:", user);
-  //   if (user && user._json) {
-  //     console.log("User _json exists:", user._json);
-  //     console.log("User name:", user._json.name);
-  //     console.log("User picture URL:", user._json.picture);
-  //   } else {
-  //     console.log("User or user._json is undefined/null.");
-  //   }
-  // }, [user]);
+  useEffect(() => {
+    // use for role checking
+    const newMenu = [...menu_master];
+    if (user?.role?.includes(3) || user?.role?.includes(4)) {
+      newMenu.push({ name: "User", endpoint: "/users" });
+    }
+    setMenuMaster(newMenu);
+  }, [user]);
 
   const handleOpenNavMenu = (event) => {
     setAnchorElNav(event.currentTarget);
@@ -161,7 +159,7 @@ function Navbar() {
                   return (
                     <div key={data.endpoint}>
                       <MenuItem onClick={handleToggleSubMenu}>
-                        <Typography textAlign="center" sx={{ flexGrow: 1 }}>
+                        <Typography sx={{ flexGrow: 1 }}>
                           {data.name}
                         </Typography>
                         {openSubMenu ? <ExpandLess /> : <ExpandMore />}
@@ -169,6 +167,38 @@ function Navbar() {
                       <Collapse in={openSubMenu} timeout="auto" unmountOnExit>
                         <List component="div" disablePadding>
                           {menu_flk.map((sub) => (
+                            <ListItemButton
+                              key={sub.endpoint}
+                              sx={{ pl: 4 }}
+                              onClick={() => {
+                                navigate(sub.endpoint);
+                                handleCloseNavMenu();
+                              }}
+                            >
+                              <Typography>{sub.name}</Typography>
+                            </ListItemButton>
+                          ))}
+                        </List>
+                      </Collapse>
+                    </div>
+                  );
+                } else if (
+                  data.endpoint === "master" &&
+                  !user?.role?.includes(5) &&
+                  !user?.role?.includes(6) &&
+                  !user?.role?.includes(7)
+                ) {
+                  return (
+                    <div key={data.endpoint}>
+                      <MenuItem onClick={handleToggleSubMenu}>
+                        <Typography sx={{ flexGrow: 1 }}>
+                          {data.name}
+                        </Typography>
+                        {openSubMenu ? <ExpandLess /> : <ExpandMore />}
+                      </MenuItem>
+                      <Collapse in={openSubMenu} timeout="auto" unmountOnExit>
+                        <List component="div" disablePadding>
+                          {menuMaster.map((sub) => (
                             <ListItemButton
                               key={sub.endpoint}
                               sx={{ pl: 4 }}
@@ -203,27 +233,40 @@ function Navbar() {
 
           {/* Display Normal */}
           <Box sx={{ flexGrow: 1, display: { xs: "none", md: "flex" } }}>
-            {Object.entries(pages).map(([index, data]) => (
-              <Button
-                key={index}
-                onClick={(e) => {
-                  if (data.endpoint === "flk") {
-                    handleOpenFLKMenu(e);
-                  } else if (data.endpoint === "master") {
-                    handleOpenMasterMenu(e);
-                  } else if (data.endpoint === "report") {
-                    handleOpenReportMenu(e);
-                  } else if (data.endpoint === "login") {
-                    console.log(user);
-                  } else {
-                    navigate(data.endpoint);
-                  }
-                }}
-                sx={{ my: 2, mx: 2, color: "white", display: "block" }}
-              >
-                {data.name}
-              </Button>
-            ))}
+            {Object.entries(pages).map(([index, data]) => {
+              if (
+                data.endpoint === "master" &&
+                (user?.role?.includes(5) ||
+                  user?.role?.includes(6) ||
+                  user?.role?.includes(7))
+              ) {
+                return null;
+              }
+
+              return (
+                <Button
+                  key={index}
+                  onClick={(e) => {
+                    if (data.endpoint === "flk") {
+                      handleOpenFLKMenu(e);
+                    } else if (data.endpoint === "master") {
+                      handleOpenMasterMenu(e);
+                    }
+                    // else if (data.endpoint === "report") {
+                    //   handleOpenReportMenu(e);
+                    // }
+                    else if (data.endpoint === "login") {
+                      console.log(user);
+                    } else {
+                      navigate(data.endpoint);
+                    }
+                  }}
+                  sx={{ my: 2, mx: 2, color: "white", display: "block" }}
+                >
+                  {data.name}
+                </Button>
+              );
+            })}
 
             <Menu
               sx={{ mt: "45px" }}
@@ -253,33 +296,40 @@ function Navbar() {
               ))}
             </Menu>
 
-            <Menu
-              sx={{ mt: "45px" }}
-              id="menu-appbar"
-              anchorEl={anchorElMaster}
-              anchorOrigin={{
-                vertical: "top",
-                horizontal: "right",
-              }}
-              keepMounted
-              transformOrigin={{
-                vertical: "top",
-                horizontal: "right",
-              }}
-              open={Boolean(anchorElMaster)}
-              onClose={handleCloseMasterMenu}
-            >
-              {menu_master.map((data) => (
-                <MenuItem key={data.endpoint} onClick={handleCloseMasterMenu}>
-                  <Typography
-                    sx={{ textAlign: "center", padding: "2px" }}
-                    onClick={() => navigate(data.endpoint)}
-                  >
-                    {data.name}
-                  </Typography>
-                </MenuItem>
-              ))}
-            </Menu>
+            {!user?.role?.includes(5) &&
+              !user?.role?.includes(6) &&
+              !user?.role?.includes(7) && (
+                <Menu
+                  sx={{ mt: "45px" }}
+                  id="menu-appbar"
+                  anchorEl={anchorElMaster}
+                  anchorOrigin={{
+                    vertical: "top",
+                    horizontal: "right",
+                  }}
+                  keepMounted
+                  transformOrigin={{
+                    vertical: "top",
+                    horizontal: "right",
+                  }}
+                  open={Boolean(anchorElMaster)}
+                  onClose={handleCloseMasterMenu}
+                >
+                  {menuMaster.map((data) => (
+                    <MenuItem
+                      key={data.endpoint}
+                      onClick={handleCloseMasterMenu}
+                    >
+                      <Typography
+                        sx={{ textAlign: "center", padding: "2px" }}
+                        onClick={() => navigate(data.endpoint)}
+                      >
+                        {data.name}
+                      </Typography>
+                    </MenuItem>
+                  ))}
+                </Menu>
+              )}
 
             <Menu
               sx={{ mt: "45px" }}

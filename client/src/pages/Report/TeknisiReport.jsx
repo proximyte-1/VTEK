@@ -24,6 +24,7 @@ import {
   FormHelperText,
   useTheme,
   useMediaQuery,
+  Autocomplete,
 } from "@mui/material";
 import dayjs from "dayjs";
 import { DataGrid } from "@mui/x-data-grid";
@@ -33,7 +34,7 @@ import * as yup from "yup";
 import { Controller, useForm } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import { useAlert } from "../../utils/alert";
-import { displayValue } from "../../utils/helpers";
+import { displayFormatDateTime, displayValue } from "../../utils/helpers";
 import axios from "axios";
 
 const TeknisiReport = () => {
@@ -44,8 +45,10 @@ const TeknisiReport = () => {
     return yup.object().shape({
       waktu_dari: yup.date().required(),
       waktu_sampai: yup.date().required(),
-      type: yup.string().required(),
-      id_teknisi: yup.string().required(),
+      type: yup.string().required().default("all"),
+      id_teknisi: yup.string(),
+      kode_area: yup.string(),
+      groups: yup.string(),
     });
   }, []);
 
@@ -64,8 +67,11 @@ const TeknisiReport = () => {
     defaultValues: {
       waktu_dari: null,
       waktu_sampai: null,
-      type: "",
+      type: "all",
       id_teknisi: "",
+      kode_area: "",
+      groups: "",
+      no_cus: "",
     },
   });
 
@@ -125,6 +131,7 @@ const TeknisiReport = () => {
       field: "no",
       headerName: "No.",
       sortable: false,
+      maxWidth: 50,
       renderCell: (params) => {
         return params.api.getAllRowIds().indexOf(params.id) + 1;
       },
@@ -132,31 +139,46 @@ const TeknisiReport = () => {
     {
       field: "no_lap",
       headerName: "No Laporan",
-      flex: 1,
+      flex: 0,
       width: 100,
       renderCell: (params) => `${params.value}`,
     },
-    { field: "pelapor", headerName: "Nama Pelapor", flex: 1 },
+    {
+      field: "no_cus",
+      headerName: "No Customer",
+      flex: 1,
+      minWidth: 150,
+    },
+    {
+      field: "no_seri",
+      headerName: "No Seri",
+      flex: 0,
+      minWidth: 150,
+    },
+    { field: "pelapor", headerName: "Nama Pelapor", flex: 0 },
+    { field: "count_bw", headerName: "Count B/W", flex: 0 },
+    { field: "count_cl", headerName: "Count C/L", flex: 0 },
+    { field: "status_res", headerName: "Result Status", flex: 0 },
     {
       field: "waktu_mulai",
       headerName: "Waktu Mulai",
-      flex: 1,
-      renderCell: (params) =>
-        params.value ? dayjs(params.value).format("YYYY-MM-DD HH:mm") : "-",
+      flex: 0,
+      minWidth: 150,
+      renderCell: (params) => displayFormatDateTime(params.value),
     },
     {
       field: "waktu_selesai",
       headerName: "Waktu Selesai",
-      flex: 1,
-      renderCell: (params) =>
-        params.value ? dayjs(params.value).format("YYYY-MM-DD HH:mm") : "-",
+      flex: 0,
+      minWidth: 150,
+      renderCell: (params) => displayFormatDateTime(params.value),
     },
     {
       field: "created_at",
       headerName: "Waktu Dibuat",
-      flex: 1,
-      renderCell: (params) =>
-        params.value ? dayjs(params.value).format("YYYY-MM-DD HH:mm") : "-",
+      flex: 0,
+      minWidth: 150,
+      renderCell: (params) => displayFormatDateTime(params.value),
     },
   ];
 
@@ -168,10 +190,30 @@ const TeknisiReport = () => {
 
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [searched, setSearched] = useState(false);
   const [datas, setDatas] = useState([]);
   const [teknisi, setTeknisi] = useState([]);
   const [customer, setCustomer] = useState([]);
+  const [kodeArea, setKodeArea] = useState([]);
+  const [areaGroups, setAreaGroups] = useState([]);
   const { alert, showAlert, closeAlert } = useAlert();
+
+  const watchGroups = watch("groups");
+
+  const filteredKodeAreas = kodeArea.filter(
+    (area) => area.groups === watchGroups
+  );
+
+  useEffect(() => {
+    const currentKodeAreaId = getValues("kode_area");
+    const isKodeAreaStillValid = filteredKodeAreas.some(
+      (area) => area.id === currentKodeAreaId
+    );
+
+    if (!isKodeAreaStillValid) {
+      setValue("kode_area", "");
+    }
+  }, [watchGroups, filteredKodeAreas, getValues, setValue]);
 
   useEffect(() => {
     if (location.state?.message) {
@@ -184,6 +226,8 @@ const TeknisiReport = () => {
 
     fetchTeknisi();
     fetchCustomer();
+    fetchArea();
+    fetchGroup();
   }, [location.state]);
 
   const fetchTeknisi = async () => {
@@ -212,7 +256,12 @@ const TeknisiReport = () => {
         .then((res) => {
           if (res.data && Array.isArray(res.data) && res.data.length > 0) {
             // Store the array of objects directly
-            setCustomer(res.data);
+            const formattedOptions = res.data.map((item) => ({
+              label: `${item.nama_cus} (${item.alias})`,
+              value: item.no_cus,
+            }));
+            console.log(JSON.stringify(formattedOptions));
+            setCustomer(formattedOptions);
           } else {
             setCustomer([]);
             showAlert("Data Customer belum ada.", "error");
@@ -224,9 +273,47 @@ const TeknisiReport = () => {
     }
   };
 
+  const fetchArea = async () => {
+    try {
+      axios
+        .get(`${import.meta.env.VITE_API_URL}api/get-area-kode`)
+        .then((res) => {
+          if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+            // Store the array of objects directly
+            setKodeArea(res.data);
+          } else {
+            setTeknisi([]);
+            showAsetKodeArealert("Data kode area belum ada.", "error");
+          }
+        });
+    } catch (err) {
+      console.error("Terjadi kesalahan saat memanggil data: ", err);
+      showAlert("Terjadi kesalahan saat memanggil data", "error");
+    }
+  };
+
+  const fetchGroup = async () => {
+    try {
+      axios
+        .get(`${import.meta.env.VITE_API_URL}api/get-area-groups`)
+        .then((res) => {
+          if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+            // Store the array of objects directly
+            setAreaGroups(res.data);
+          } else {
+            setAreaGroups([]);
+            showAsetKodeArealert("Data ara group belum ada.", "error");
+          }
+        });
+    } catch (err) {
+      console.error("Terjadi kesalahan saat memanggil data: ", err);
+      showAlert("Terjadi kesalahan saat memanggil data", "error");
+    }
+  };
+
   // Export handler
   const handleExport = async () => {
-    setLoading(true);
+    // setLoading(true);
     try {
       const response = await fetch(
         import.meta.env.VITE_API_URL + `api/export-report-teknisi`,
@@ -251,14 +338,14 @@ const TeknisiReport = () => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `Report Teknisi ${dayjs().format("DD-MM-YYYY")}.xlsx`;
+      link.download = `Report ${dayjs().format("DD-MM-YYYY")}.xlsx`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       setLoading(false);
     } catch (err) {
       console.error("Export error:", err);
-      showAlert("Failed to export Excel");
+      showAlert("Failed to export Excel", "error");
     }
   };
 
@@ -277,6 +364,10 @@ const TeknisiReport = () => {
             sampai: getValues("waktu_sampai"),
             jenis: getValues("type"),
             teknisi: getValues("id_teknisi"),
+            kode_area: getValues("kode_area"),
+            groups: getValues("groups"),
+            no_cus: getValues("no_cus")?.value,
+            no_seri: getValues("no_seri"),
           }),
         }
       );
@@ -285,6 +376,7 @@ const TeknisiReport = () => {
 
       const data = await response.json();
       setDatas(data.data); // <-- set the array into state
+      setSearched(true);
       setLoading(false);
     } catch (err) {
       console.error("Filter error : ", err);
@@ -307,7 +399,7 @@ const TeknisiReport = () => {
   return (
     <Container sx={{ padding: 3 }}>
       <Typography variant="h4" gutterBottom>
-        Report Per Teknisi
+        Report Laporan Kerja
       </Typography>
 
       <Box>
@@ -417,6 +509,7 @@ const TeknisiReport = () => {
                   variant="outlined"
                   fullWidth
                   {...register("no_seri")}
+                  placeholder="No. Seri"
                   error={!!errors.no_seri}
                   helperText={errors.no_seri?.message}
                 />
@@ -428,27 +521,69 @@ const TeknisiReport = () => {
                   <Controller
                     name="no_cus"
                     control={control}
-                    rules={{ required: "No Customer is required" }} // Add your validation rules here
-                    render={({ field }) => (
-                      <FormControl fullWidth error={!!errors.no_cus}>
+                    render={(
+                      { field, fieldState: { error } } // Render prop provides field and error info
+                    ) => (
+                      <FormControl fullWidth error={!!errors.no_customer}>
                         <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
                           Pilih Customer
                         </Typography>
+                        <Autocomplete
+                          {...field}
+                          id="customer-autocomplete"
+                          options={customer}
+                          // This is crucial for making Autocomplete work with Controller.
+                          // It ensures the value passed to onChange is the entire option object.
+                          onChange={(event, newValue) =>
+                            field.onChange(newValue)
+                          }
+                          isOptionEqualToValue={(option, value) =>
+                            option.value === value.value
+                          }
+                          renderInput={(params) => (
+                            <TextField
+                              {...params}
+                              // Display error message if validation fails
+                              error={!!error}
+                              helperText={error?.message}
+                            />
+                          )}
+                        />
+                      </FormControl>
+                    )}
+                  />
+                </Grid>
+              )}
+
+              {/* Area Groups */}
+              {areaGroups && (
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Controller
+                    name="groups"
+                    control={control}
+                    render={({ field }) => (
+                      <FormControl fullWidth error={!!errors.groups}>
+                        <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
+                          Pilih Groups
+                        </Typography>
                         <Select
-                          id="customer-select"
+                          id="groups-select"
                           variant="outlined"
                           {...field}
                           displayEmpty
                         >
-                          {customer.map((item) => (
-                            <MenuItem key={item.id} value={item.no_cus}>
-                              {`${item.nama_cus} (${item.alias})`}
+                          <MenuItem value="" key="groups-disabled">
+                            <em>Pilih Groups</em>
+                          </MenuItem>
+                          {areaGroups.map((item) => (
+                            <MenuItem key={item.groups} value={item.groups}>
+                              {`${item.groups}`}
                             </MenuItem>
                           ))}
                         </Select>
-                        {errors.no_cus && (
+                        {errors.groups && (
                           <FormHelperText>
-                            {errors.no_cus?.message}
+                            {errors.groups?.message}
                           </FormHelperText>
                         )}
                       </FormControl>
@@ -457,8 +592,43 @@ const TeknisiReport = () => {
                 </Grid>
               )}
 
-              {/* Area Groups */}
               {/* Area Kode Area */}
+              {kodeArea && watchGroups && (
+                <Grid size={{ xs: 12, md: 6 }}>
+                  <Controller
+                    name="kode_area"
+                    control={control}
+                    render={({ field }) => (
+                      <FormControl fullWidth error={!!errors.kode_area}>
+                        <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
+                          Pilih Kode Area
+                        </Typography>
+                        <Select
+                          id="area-select"
+                          variant="outlined"
+                          {...field}
+                          displayEmpty
+                        >
+                          <MenuItem value="" key="area-disabled">
+                            <em>Pilih Kode Area</em>
+                          </MenuItem>
+
+                          {filteredKodeAreas.map((item) => (
+                            <MenuItem key={item.id} value={item.id}>
+                              {`${item.kode_area} (${item.nama_area})`}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                        {errors.kode_area && (
+                          <FormHelperText>
+                            {errors.kode_area?.message}
+                          </FormHelperText>
+                        )}
+                      </FormControl>
+                    )}
+                  />
+                </Grid>
+              )}
 
               {/* Teknisi */}
               {teknisi && (
@@ -466,7 +636,6 @@ const TeknisiReport = () => {
                   <Controller
                     name="id_teknisi"
                     control={control}
-                    rules={{ required: "Teknisi is required" }} // Add your validation rules here
                     render={({ field }) => (
                       <FormControl fullWidth error={!!errors.id_teknisi}>
                         <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
@@ -478,6 +647,9 @@ const TeknisiReport = () => {
                           {...field}
                           displayEmpty
                         >
+                          <MenuItem value="" key="teknisi-disabled">
+                            <em>Pilih Teknisi</em>
+                          </MenuItem>
                           {teknisi.map((item) => (
                             <MenuItem key={item.id} value={item.id}>
                               {item.name}
@@ -517,33 +689,41 @@ const TeknisiReport = () => {
           </form>
         </LocalizationProvider>
       </Box>
-      <Box sx={{ width: "100%", overflowX: "auto" }}>
-        <Box sx={{ minWidth: 700 }}>
-          <DataGrid
-            rows={datas}
-            columns={columns}
-            getRowId={(row) => row.id}
-            initialState={{
-              pagination: {
-                paginationModel: {
-                  pageSize: 5,
+      {searched && (
+        <Box sx={{ width: "100%", overflowX: "auto" }}>
+          <Box sx={{ minWidth: 700 }}>
+            <DataGrid
+              rows={datas}
+              columns={columns}
+              getRowId={(row) => row.id}
+              initialState={{
+                pagination: {
+                  paginationModel: {
+                    pageSize: 15,
+                  },
                 },
-              },
-            }}
-            pageSizeOptions={[5]}
-          />
+              }}
+              pageSizeOptions={[15]}
+            />
+          </Box>
         </Box>
-      </Box>
+      )}
 
       {/* Link to Form Page */}
-      <Button
-        variant="contained"
-        color="primary"
-        style={{ marginTop: "20px" }}
-        onClick={handleExport}
-      >
-        {loading ? <CircularProgress size={24} color="info" /> : "Export Excel"}
-      </Button>
+      {searched && (
+        <Button
+          variant="contained"
+          color="primary"
+          style={{ marginTop: "20px" }}
+          onClick={handleExport}
+        >
+          {loading ? (
+            <CircularProgress size={24} color="info" />
+          ) : (
+            "Export Excel"
+          )}
+        </Button>
+      )}
 
       {/* Alert notifications */}
       <Snackbar

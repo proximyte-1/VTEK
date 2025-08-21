@@ -30,6 +30,35 @@ export const columnsBarang = [
   },
 ];
 
+export const columnsBarangApproval = [
+  {
+    field: "no",
+    headerName: "No.",
+    sortable: false,
+    renderCell: (params) => {
+      return params.api.getAllRowIds().indexOf(params.id) + 1;
+    },
+  },
+  {
+    field: "kode_part",
+    headerName: "Kode Part",
+    flex: 1,
+    renderCell: ({ row }) => <div>{displayValue(row.no_brg)}</div>,
+  },
+  {
+    field: "nama_part",
+    headerName: "Nama Part",
+    flex: 1,
+    renderCell: ({ row }) => <div>{displayValue(row.nama_brg)}</div>,
+  },
+  {
+    field: "quantity",
+    headerName: "Quantity",
+    flex: 1,
+    renderCell: ({ row }) => <div>{displayValue(row.qty)}</div>,
+  },
+];
+
 export const schemaNoRep = yup.object().shape({
   no_rep: yup.string().required(),
   no_call: yup.string().required(),
@@ -122,6 +151,39 @@ export const displayFormatDate = (data) => {
     date.hour() !== 7 || date.minute() !== 0 || date.second() !== 0;
 
   return hasTime ? date.format("DD-MM-YYYY HH:mm") : date.format("DD-MM-YYYY");
+};
+
+export const displayFormatDateTime = (data) => {
+  if (!data) return "-";
+
+  // Use a regular expression to check for the presence of a time component.
+  // This regex looks for 'T' followed by a time and optionally a 'Z' or a timezone offset.
+  const isDatetime = /[T][0-9]{2}:[0-9]{2}/.test(data);
+
+  if (isDatetime) {
+    // If it's a datetime, format it as 'YYYY-MM-DD HH:mm'
+    const dateObj = new Date(data);
+
+    // Use UTC methods to avoid timezone conversion
+    const year = dateObj.getUTCFullYear();
+    const month = String(dateObj.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(dateObj.getUTCDate()).padStart(2, "0");
+
+    const hours = String(dateObj.getUTCHours()).padStart(2, "0");
+    const minutes = String(dateObj.getUTCMinutes()).padStart(2, "0");
+
+    return `${year}-${month}-${day} ${hours}:${minutes}`;
+  } else {
+    // If it's a date-only string, format it as 'YYYY-MM-DD'
+    const dateObj = new Date(data);
+
+    // Use UTC methods for consistency
+    const year = dateObj.getUTCFullYear();
+    const month = String(dateObj.getUTCMonth() + 1).padStart(2, "0");
+    const day = String(dateObj.getUTCDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+  }
 };
 
 export const handleFileSelect = (file) => {

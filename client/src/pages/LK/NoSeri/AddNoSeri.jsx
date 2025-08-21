@@ -47,7 +47,7 @@ import { useAuth } from "../../../utils/auth";
 const AddNoSeri = () => {
   const navigate = useNavigate();
   const location = useLocation(); // Initialize useLocation hook
-  const { initialNoSeri } = location.state || {}; // Get initialNoSeri from location state
+  const { initialData } = location.state || {}; // Get initialData from location state
 
   const { user } = useAuth();
   const { alert, showAlert, closeAlert } = useAlert();
@@ -195,21 +195,21 @@ const AddNoSeri = () => {
 
   useEffect(() => {
     const loadInitialData = async () => {
-      if (initialNoSeri) {
+      if (initialData) {
         setLoading(true);
-        setValue("no_seri", initialNoSeri);
+        setValue("no_seri", initialData.no_seri);
         try {
-          const customer = await fetchDataCustomer(initialNoSeri);
+          const customer = await fetchDataCustomer(initialData);
           if (customer) {
             await fetchLastService(displayValue(customer["d:Serial_No"]));
             await fetchDataContract(
               displayValue(customer["d:Sell_to_Customer_No"])
             );
-            await fetchDataInstalasi(displayValue(customer["d:Serial_No"]));
             await fetchContRes(
               customer["d:Sell_to_Customer_No"],
               customer["d:Serial_No"]
             );
+            fetchDataArea(displayValue(customer["d:Sell_to_Customer_No"]));
           }
           setExpand(false);
           setSearched(true); // Set searched to true as data is loaded
@@ -222,16 +222,26 @@ const AddNoSeri = () => {
       }
     };
     loadInitialData();
-  }, [initialNoSeri]); // Rerun when initialNoSeri changes
+  }, [initialData]); // Rerun when initialData changes
 
   let statusRes = watch("status_res");
 
-  const fetchDataCustomer = async (id) => {
+  const fetchDataCustomer = async (inst_data) => {
+    let data;
     try {
-      const fetch_customer = await axios.get(
-        import.meta.env.VITE_API_URL + `api/nav-data-noseri?id=${id}`
-      );
-      const data = fetch_customer.data;
+      if (inst_data.no_cus || typeof inst_data === "object") {
+        const fetch_customer = await axios.get(
+          import.meta.env.VITE_API_URL +
+            `api/nav-data-noseri-name?no_seri=${inst_data.no_seri}&no_cus=${inst_data.no_cus}`
+        );
+        data = fetch_customer.data;
+      } else {
+        const fetch_customer = await axios.get(
+          import.meta.env.VITE_API_URL +
+            `api/nav-data-noseri?no_seri=${inst_data}`
+        );
+        data = fetch_customer.data;
+      }
 
       if (data.length <= 0) {
         showAlert("Nomor Seri Belum Ada Pada Navision !", "error");
@@ -402,11 +412,10 @@ const AddNoSeri = () => {
       return;
     }
 
-    // reset({ no_seri: noSeri });
-
     try {
       // Fetch customer data
       const customer = await fetchDataCustomer(noSeri);
+
       if (customer) {
         const dataLastService = await fetchLastService(
           displayValue(customer["d:Serial_No"])
@@ -465,9 +474,7 @@ const AddNoSeri = () => {
       });
 
       data.append("created_by", user?.id_user || "0");
-      // if (user) {
-      //   data.append("created_by", user?.id_user || "0");
-      // }
+      data.append("status_appr", "2");
 
       const response = await axios.post(
         import.meta.env.VITE_API_URL + `api/create-flk`,
@@ -475,8 +482,20 @@ const AddNoSeri = () => {
       );
 
       const { data: result } = response;
+      const reportId = result.data.id;
 
-      if (!response.data || !result.data?.id) {
+      const apprPayload = {
+        id_lk: reportId,
+        id_area: area.id_area || 0,
+        approved: 2,
+      };
+
+      const apprResponse = await axios.post(
+        `${import.meta.env.VITE_API_URL}api/create-approval`,
+        apprPayload
+      );
+
+      if (!apprResponse.data.ok) {
         throw new Error("Gagal menyimpan data utama.");
       } else {
         setRetry(false);
@@ -531,7 +550,7 @@ const AddNoSeri = () => {
                 {...register("no_seri")}
                 error={!!errors.no_seri}
                 helperText={errors.no_seri?.message}
-                disabled={initialNoSeri ? true : false}
+                disabled={initialData ? true : false}
               />
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
@@ -542,8 +561,8 @@ const AddNoSeri = () => {
                 variant="contained"
                 color="primary"
                 onClick={handleSearch}
-                sx={{ marginX: 3 }}
-                disabled={loading || (initialNoSeri ? true : false)}
+                sx={{ marginX: 2 }}
+                disabled={loading || (initialData ? true : false)}
               >
                 {loading ? <CircularProgress size={24} /> : "Search"}
               </Button>
@@ -616,7 +635,6 @@ const AddNoSeri = () => {
                         <Typography>
                           Teknisi : {displayValue(area?.nama_teknisi)}
                         </Typography>
-                        <Typography>C.S.O :</Typography>
                       </Grid>
                     </Grid>
                   </AccordionDetails>
@@ -656,15 +674,16 @@ const AddNoSeri = () => {
 
                       {/* Row 2 */}
                       <Grid size={{ xs: 12, sm: 6, md: 4 }}>
-                        <Typography>Tanggal Instalasi :</Typography>
-                        {displayFormatDate(instalasi?.tgl_instalasi)}
+                        <Typography>
+                          Tanggal Instalasi :{" "}
+                          {displayFormatDate(instalasi?.tgl_instalasi)}
+                        </Typography>
                         <Typography>
                           Tanggal Kontrak :{" "}
                           {displayFormatDate(contract?.tgl_contract_exp)}
                         </Typography>
                         <Typography>
-                          Tipe Service :{" "}
-                          {displayFormatDate(contract?.type_service)}
+                          Tipe Service : {displayValue(contract?.type_service)}
                         </Typography>
                       </Grid>
 

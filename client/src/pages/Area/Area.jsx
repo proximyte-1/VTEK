@@ -7,12 +7,14 @@ import {
   Snackbar,
   Alert,
   Box,
+  IconButton,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import axios from "axios";
 import { useAlert } from "../../utils/alert";
 import { Margin } from "@mui/icons-material";
 import dayjs from "dayjs";
+import EditIcon from "@mui/icons-material/Edit";
 
 const Area = () => {
   const location = useLocation();
@@ -34,18 +36,18 @@ const Area = () => {
       headerName: "Actions",
       sortable: false,
       filterable: false,
-      flex: 1,
+      flex: 1, // Disables flex shrinking
+      width: 100,
+      minWidth: 100, // Fallback width
       align: "center",
       renderCell: (params) => (
         <>
-          <Button
+          <IconButton
             variant="contained"
-            color="warning"
-            sx={{ marginRight: 0.5 }}
             onClick={() => navigate(`edit/${params.row.groups}`)}
           >
-            Edit
-          </Button>
+            <EditIcon />
+          </IconButton>
         </>
       ),
     },
@@ -95,11 +97,11 @@ const Area = () => {
             initialState={{
               pagination: {
                 paginationModel: {
-                  pageSize: 5,
+                  pageSize: 15,
                 },
               },
             }}
-            pageSizeOptions={[5]}
+            pageSizeOptions={[15]}
             disableRowSelectionOnClick
           />
         </Box>
@@ -109,7 +111,7 @@ const Area = () => {
       <Button
         variant="contained"
         color="primary"
-        style={{ marginTop: "20px" }}
+        style={{ marginTop: "20px", marginBottom: "20px" }}
         onClick={() => navigate(`add`)}
       >
         New Data
