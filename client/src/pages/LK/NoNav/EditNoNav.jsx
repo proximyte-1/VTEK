@@ -203,6 +203,8 @@ const EditNoNav = () => {
   });
 
   let statusRes = watch("status_res");
+  let waktuCall = watch("waktu_call");
+  let waktuMulai = watch("waktu_mulai");
 
   const handleFileSelect = (file) => {
     setValue("pic", file, { shouldValidate: true });
@@ -796,6 +798,10 @@ const EditNoNav = () => {
                               maxDateTime={new Date(maxDateTime)}
                               {...field}
                               format="dd-MM-yy HH:mm"
+                              onChange={(newValue) => {
+                                field.onChange(newValue);
+                                setValue("waktu_dtg", newValue);
+                              }}
                               slotProps={{
                                 textField: {
                                   fullWidth: true,
@@ -821,6 +827,7 @@ const EditNoNav = () => {
                               minDateTime={new Date(minDateTime)}
                               maxDateTime={new Date(maxDateTime)}
                               format="dd-MM-yy HH:mm"
+                              disabled={!waktuCall}
                               onChange={(newValue) => {
                                 const callTime = watch("waktu_call");
                                 if (
@@ -1024,6 +1031,10 @@ const EditNoNav = () => {
                               maxDateTime={new Date(maxDateTime)}
                               format="dd-MM-yy HH:mm"
                               {...field}
+                              onChange={(newValue) => {
+                                field.onChange(newValue);
+                                setValue("waktu_selesai", newValue);
+                              }}
                               slotProps={{
                                 textField: {
                                   fullWidth: true,
@@ -1050,6 +1061,7 @@ const EditNoNav = () => {
                               minDateTime={new Date(minDateTime)}
                               maxDateTime={new Date(maxDateTime)}
                               format="dd-MM-yy HH:mm"
+                              disabled={!waktuMulai}
                               onChange={(newValue) => {
                                 const mulaiTime = watch("waktu_mulai");
 

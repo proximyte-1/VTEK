@@ -124,7 +124,7 @@ const Contract = () => {
         style={{ marginTop: "20px", marginBottom: "20px" }}
         onClick={() => navigate(`add`)}
       >
-        New Data
+        New
       </Button>
 
       <Snackbar

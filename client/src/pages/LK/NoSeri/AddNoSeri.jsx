@@ -32,7 +32,11 @@ import { Controller, useForm } from "react-hook-form";
 import * as yup from "yup";
 import { yupResolver } from "@hookform/resolvers/yup";
 import { useAlert } from "../../../utils/alert";
-import { displayFormatDate, displayValue } from "../../../utils/helpers";
+import {
+  columnsSelectCustomer,
+  displayFormatDate,
+  displayValue,
+} from "../../../utils/helpers";
 import axios from "axios";
 import {
   maxDateTime,
@@ -43,6 +47,7 @@ import {
   selectStatusResult,
 } from "../../../utils/constants";
 import { useAuth } from "../../../utils/auth";
+import { DataGrid } from "@mui/x-data-grid";
 
 const AddNoSeri = () => {
   const navigate = useNavigate();
@@ -51,7 +56,9 @@ const AddNoSeri = () => {
 
   const { user } = useAuth();
   const { alert, showAlert, closeAlert } = useAlert();
+  const [selected_customer, setSelectedCustomer] = useState([]);
   const [customer, setDataCustomer] = useState([]);
+  const [list_select_customer, setListSelectCustomer] = useState([]);
   const [searched, setSearched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [lastService, setLastService] = useState([]);
@@ -60,7 +67,9 @@ const AddNoSeri = () => {
   const [area, setArea] = useState([]);
   const [teknisi, setTeknisi] = useState([]);
   const [expand, setExpand] = useState(true);
+  const [expand_select_customer, setExpandSelectCustomer] = useState(true);
   const [retry, setRetry] = useState(false);
+  const [selected, setSelected] = useState();
 
   const schemaNoSeri = useMemo(() => {
     return yup.object().shape({
@@ -225,23 +234,17 @@ const AddNoSeri = () => {
   }, [initialData]); // Rerun when initialData changes
 
   let statusRes = watch("status_res");
+  let waktuCall = watch("waktu_call");
+  let waktuMulai = watch("waktu_mulai");
 
   const fetchDataCustomer = async (inst_data) => {
     let data;
     try {
-      if (inst_data.no_cus || typeof inst_data === "object") {
-        const fetch_customer = await axios.get(
-          import.meta.env.VITE_API_URL +
-            `api/nav-data-noseri-name?no_seri=${inst_data.no_seri}&no_cus=${inst_data.no_cus}`
-        );
-        data = fetch_customer.data;
-      } else {
-        const fetch_customer = await axios.get(
-          import.meta.env.VITE_API_URL +
-            `api/nav-data-noseri?no_seri=${inst_data}`
-        );
-        data = fetch_customer.data;
-      }
+      const fetch_customer = await axios.get(
+        import.meta.env.VITE_API_URL +
+          `api/nav-data-noseri-name?no_seri=${inst_data.no_seri}&no_cus=${inst_data.no_cus}`
+      );
+      data = fetch_customer.data;
 
       if (data.length <= 0) {
         showAlert("Nomor Seri Belum Ada Pada Navision !", "error");
@@ -258,6 +261,32 @@ const AddNoSeri = () => {
       // Update form values using react-hook-form's setValue
       setValue("no_seri", customerData["d:Serial_No"]);
       setValue("no_cus", customerData["d:Sell_to_Customer_No"]);
+
+      return customerData;
+    } catch (error) {
+      console.error("Error fetching customer:", error);
+      showAlert("Gagal mengambil data dari server", "error");
+      setSearched(false);
+    }
+  };
+
+  const fetchCustomerByNoSeri = async (no_seri) => {
+    try {
+      const fetch_customer = await axios.get(
+        import.meta.env.VITE_API_URL + `api/nav-data-noseri?no_seri=${no_seri}`
+      );
+      const data = fetch_customer.data;
+
+      if (data.length <= 0) {
+        showAlert("Nomor Seri Belum Ada Pada Navision !", "error");
+        setSearched(false);
+        return null;
+      }
+
+      const customerData = data;
+
+      showAlert("Nomor Seri Tersedia", "success");
+      setListSelectCustomer(customerData);
 
       return customerData;
     } catch (error) {
@@ -414,7 +443,35 @@ const AddNoSeri = () => {
 
     try {
       // Fetch customer data
-      const customer = await fetchDataCustomer(noSeri);
+      const customer = await fetchCustomerByNoSeri(noSeri);
+
+      setExpandSelectCustomer(false);
+      setLoading(false);
+    } catch (error) {
+      console.error("Error in handleSearch:", error);
+      showAlert("Terjadi kesalahan saat mencari data.", "error");
+      setLoading(false);
+    }
+  };
+
+  const handleNoSeriSearch = async () => {
+    setLoading(true);
+    const noSeri = selected_customer?.["d:Serial_No"];
+    const noCus = selected_customer?.["d:Sell_to_Customer_No"];
+
+    if (!noSeri) {
+      showAlert("Terjadi kesalahan saat mencari data.", "error");
+      setSearched(false);
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // Fetch customer data
+      const customer = await fetchDataCustomer({
+        no_seri: noSeri,
+        no_cus: noCus,
+      });
 
       if (customer) {
         const dataLastService = await fetchLastService(
@@ -579,6 +636,58 @@ const AddNoSeri = () => {
               </Button>
             </Grid>
             <Grid container spacing={5}>
+              {/* Select Customer fo the No. Seri */}
+              {!expand_select_customer && (
+                <Grid size={12}>
+                  <Accordion expanded={!expand_select_customer}>
+                    <AccordionSummary
+                      expandIcon={<ExpandMoreRounded />}
+                      aria-controls="panel1-content"
+                      id="panel1-header"
+                    >
+                      <Typography component="span" variant="h5">
+                        Select Customer
+                      </Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      {/* Table */}
+                      <Box sx={{ width: "100%", overflowX: "auto" }}>
+                        <Box sx={{ minWidth: 700 }}>
+                          <DataGrid
+                            rows={list_select_customer}
+                            columns={columnsSelectCustomer}
+                            getRowId={(row) => row["d:Sell_to_Customer_No"]}
+                            initialState={{
+                              pagination: {
+                                paginationModel: {
+                                  pageSize: 15,
+                                },
+                              },
+                            }}
+                            pageSizeOptions={[15]}
+                            onRowClick={(params) => {
+                              setSelectedCustomer(params.row);
+                              console.log("Row Customer clicked:", params.row);
+                            }}
+                          />
+                        </Box>
+                      </Box>
+                      <Button
+                        type="button"
+                        name="search"
+                        id="search"
+                        variant="contained"
+                        color="primary"
+                        onClick={handleNoSeriSearch}
+                        sx={{ marginTop: 2 }}
+                        disabled={loading || (initialData ? true : false)}
+                      >
+                        {loading ? <CircularProgress size={24} /> : "Select"}
+                      </Button>
+                    </AccordionDetails>
+                  </Accordion>
+                </Grid>
+              )}
               {/* Accordion 1 - Non Input */}
               <Grid size={12}>
                 <Accordion
@@ -854,42 +963,10 @@ const AddNoSeri = () => {
                               maxDateTime={new Date(maxDateTime)}
                               format="dd-MM-yy HH:mm"
                               {...field}
-                              // onChange={(newValue) => {
-                              //   const now = dayjs();
-                              //   const diffInDays = now.diff(
-                              //     dayjs(newValue),
-                              //     "day"
-                              //   );
-
-                              //   if (
-                              //     diffInDays <
-                              //     import.meta.env.VITE_FORWARD_PENJADWALAN_DAYS
-                              //   ) {
-                              //     showAlert(
-                              //       `Waktu tidak boleh lebih dari ${
-                              //         import.meta.env
-                              //           .VITE_FORWARD_PENJADWALAN_DAYS
-                              //       } hari ke depan.`,
-                              //       "error"
-                              //     );
-                              //     return;
-                              //   }
-
-                              //   if (
-                              //     diffInDays >
-                              //     import.meta.env.VITE_BACKDATE_DAYS
-                              //   ) {
-                              //     showAlert(
-                              //       `Waktu tidak boleh lebih dari ${
-                              //         import.meta.env.VITE_BACKDATE_DAYS
-                              //       } hari ke belakang.`,
-                              //       "error"
-                              //     );
-                              //     return;
-                              //   }
-
-                              //   field.onChange(newValue); // still update the form
-                              // }}
+                              onChange={(newValue) => {
+                                field.onChange(newValue);
+                                setValue("waktu_dtg", newValue);
+                              }}
                               slotProps={{
                                 textField: {
                                   fullWidth: true,
@@ -915,6 +992,7 @@ const AddNoSeri = () => {
                               minDateTime={new Date(minDateTime)}
                               maxDateTime={new Date(maxDateTime)}
                               format="dd-MM-yy HH:mm"
+                              disabled={!waktuCall}
                               onChange={(newValue) => {
                                 const callTime = watch("waktu_call");
                                 if (
@@ -1118,31 +1196,10 @@ const AddNoSeri = () => {
                               maxDateTime={new Date(maxDateTime)}
                               format="dd-MM-yy HH:mm"
                               {...field}
-                              // onChange={(newValue) => {
-                              //   const now = dayjs();
-                              //   const diffInDays = now.diff(
-                              //     dayjs(newValue),
-                              //     "day"
-                              //   );
-
-                              //   if (diffInDays < -maxForwardDays) {
-                              //     showAlert(
-                              //       `Waktu tidak boleh lebih dari ${maxForwardDays} hari ke depan.`,
-                              //       "error"
-                              //     );
-                              //     return;
-                              //   }
-
-                              //   if (diffInDays > maxBackdateDays) {
-                              //     showAlert(
-                              //       `Waktu tidak boleh lebih dari ${maxBackdateDays} hari ke belakang.`,
-                              //       "error"
-                              //     );
-                              //     return;
-                              //   }
-
-                              //   field.onChange(newValue);
-                              // }}
+                              onChange={(newValue) => {
+                                field.onChange(newValue);
+                                setValue("waktu_selesai", newValue);
+                              }}
                               slotProps={{
                                 textField: {
                                   fullWidth: true,
@@ -1169,6 +1226,7 @@ const AddNoSeri = () => {
                               minDateTime={new Date(minDateTime)}
                               maxDateTime={new Date(maxDateTime)}
                               format="dd-MM-yy HH:mm"
+                              disabled={!waktuMulai}
                               onChange={(newValue) => {
                                 const mulaiTime = watch("waktu_mulai");
 

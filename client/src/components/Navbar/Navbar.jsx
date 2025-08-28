@@ -22,10 +22,10 @@ const pages = [
   { endpoint: "master", name: "Master" },
   { endpoint: "flk", name: "Laporan Kerja" },
   { endpoint: "report", name: "Report" },
-  { endpoint: "login", name: "User Data" },
+  // { endpoint: "login", name: "User Data" },
 ];
 const settings = [
-  { endpoint: "/profile", name: "Profile" },
+  // { endpoint: "/profile", name: "Profile" },
   { endpoint: "/logout", name: "Logout" },
 ];
 
@@ -285,11 +285,14 @@ function Navbar() {
               onClose={handleCloseFLKMenu}
             >
               {menu_flk.map((data) => (
-                <MenuItem key={data.endpoint} onClick={handleCloseFLKMenu}>
-                  <Typography
-                    sx={{ textAlign: "center", padding: "2px" }}
-                    onClick={() => navigate(data.endpoint)}
-                  >
+                <MenuItem
+                  key={data.endpoint}
+                  onClick={() => {
+                    navigate(data.endpoint);
+                    handleCloseFLKMenu();
+                  }}
+                >
+                  <Typography sx={{ textAlign: "center", padding: "2px" }}>
                     {data.name}
                   </Typography>
                 </MenuItem>
@@ -318,12 +321,12 @@ function Navbar() {
                   {menuMaster.map((data) => (
                     <MenuItem
                       key={data.endpoint}
-                      onClick={handleCloseMasterMenu}
+                      onClick={() => {
+                        navigate(data.endpoint);
+                        handleCloseMasterMenu();
+                      }}
                     >
-                      <Typography
-                        sx={{ textAlign: "center", padding: "2px" }}
-                        onClick={() => navigate(data.endpoint)}
-                      >
+                      <Typography sx={{ textAlign: "center", padding: "2px" }}>
                         {data.name}
                       </Typography>
                     </MenuItem>
@@ -351,7 +354,10 @@ function Navbar() {
                 <MenuItem key={data.endpoint} onClick={handleCloseReportMenu}>
                   <Typography
                     sx={{ textAlign: "center", padding: "2px" }}
-                    onClick={() => navigate(data.endpoint)}
+                    onClick={() => {
+                      navigate(data.endpoint);
+                      handleCloseReportMenu();
+                    }}
                   >
                     {data.name}
                   </Typography>
@@ -387,11 +393,8 @@ function Navbar() {
               onClose={handleCloseUserMenu}
             >
               {settings.map((data) => (
-                <MenuItem key={data.endpoint} onClick={handleCloseUserMenu}>
-                  <Typography
-                    sx={{ textAlign: "center" }}
-                    onClick={() => handleLogout()}
-                  >
+                <MenuItem key={data.endpoint} onClick={() => handleLogout()}>
+                  <Typography sx={{ textAlign: "center" }}>
                     {data.name}
                   </Typography>
                 </MenuItem>

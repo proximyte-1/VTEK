@@ -59,6 +59,41 @@ export const columnsBarangApproval = [
   },
 ];
 
+export const columnsSelectCustomer = [
+  {
+    field: "no",
+    headerName: "No.",
+    sortable: false,
+    renderCell: (params) => {
+      return params.api.getAllRowIds().indexOf(params.id) + 1;
+    },
+  },
+  {
+    field: "no_cus",
+    headerName: "No. Customer",
+    flex: 1,
+    renderCell: ({ row }) => (
+      <div>{displayValue(row["d:Sell_to_Customer_No"])}</div>
+    ),
+  },
+  {
+    field: "nama_customer",
+    headerName: "Nama Customer",
+    flex: 1,
+    renderCell: ({ row }) => (
+      <div>{displayValue(row["d:Sell_to_Customer_Name"])}</div>
+    ),
+  },
+  {
+    field: "address",
+    headerName: "Address",
+    flex: 1,
+    renderCell: ({ row }) => (
+      <div>{displayValue(row["d:Sell_to_Address"])}</div>
+    ),
+  },
+];
+
 export const schemaNoRep = yup.object().shape({
   no_rep: yup.string().required(),
   no_call: yup.string().required(),

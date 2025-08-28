@@ -322,6 +322,24 @@ app.get("/api/get-flk-norep", async (req, res) => {
   }
 });
 
+app.post("/api/get-user-approval", async (req, res) => {
+  const { data_lk = "" } = req.body;
+
+  const cleanData = data_lk
+    .replace("[", "(")
+    .replace("]", ")")
+    .replaceAll('"', "'");
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_LK_APPR} WHERE id_lk IN ${cleanData}`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
 app.get("/api/get-rep-seri-by-cus", async (req, res) => {
   const { id_cus = "", value = "" } = req.query;
   try {
@@ -589,12 +607,21 @@ app.get("/api/nav-data-noseri-name", (req, res) => {
 app.get("/api/nav-data-noseri", (req, res) => {
   const { no_seri } = req.query;
 
-  const navURL =
-    process.env.NAV_WS_URL + navFilterTopEncode("Serial_No", no_seri);
+  const navURL = process.env.NAV_WS_URL + navFilterEncode("Serial_No", no_seri);
 
   fetchNavData(navURL, (err, data) => {
     if (err) return res.status(err.status).json(err);
-    res.json(data);
+    // const unique = [
+    //   ...new Set(data.map((item) => item["d:Sell_to_Customer_No"])),
+    // ];
+    const unique = data.filter(
+      (obj, index, self) =>
+        index ===
+        self.findIndex(
+          (t) => t["d:Sell_to_Customer_No"] === obj["d:Sell_to_Customer_No"]
+        )
+    );
+    res.json(unique);
   });
 });
 
@@ -606,6 +633,21 @@ app.get("/api/nav", (req, res) => {
   });
 });
 
+app.get("/api/nav-master-customer", (req, res) => {
+  const navURL = process.env.NAV_WS_MASTER_CUSTOMER_URL;
+  fetchNavData(navURL, (err, data) => {
+    if (err) return res.status(err.status).json(err);
+    res.json(data);
+  });
+});
+
+app.get("/api/nav-master-machine", (req, res) => {
+  const navURL = process.env.NAV_WS_MASTER_MACHINE_URL;
+  fetchNavData(navURL, (err, data) => {
+    if (err) return res.status(err.status).json(err);
+    res.json(data);
+  });
+});
 // ==== FLK CRUD ====
 app.post("/api/create-flk", upload.single("pic"), async (req, res) => {
   const fields = req.body;
@@ -663,9 +705,9 @@ app.post("/api/create-flk", upload.single("pic"), async (req, res) => {
         waktu_selesai, count_bw, count_cl, saran, status_res, rep_ke, no_seri,
         type, created_by, pic, no_lap, no_fd, id_teknisi, status_appr
       ) OUTPUT INSERTED.id VALUES (
-        '${
+        ${
           no_rep || null
-        }', '${no_cus}', '${no_call}', '${pelapor}', '${call}', '${dtg}',
+        }, '${no_cus}', '${no_call}', '${pelapor}', '${call}', '${dtg}',
         '${status_call}', '${keluhan}', '${kat_keluhan}', '${problem}', '${kat_problem}',
         '${solusi}', '${mulai}', '${selesai}', '${count_bw}', '${count_cl}',
         '${saran}', '${status_res}', ${rep_ke}, '${no_seri}', '${type}',

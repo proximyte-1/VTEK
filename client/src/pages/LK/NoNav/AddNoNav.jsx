@@ -198,6 +198,8 @@ const AddNoNav = () => {
   });
 
   let statusRes = watch("status_res");
+  let waktuCall = watch("waktu_call");
+  let waktuMulai = watch("waktu_mulai");
 
   useEffect(() => {
     const fetchNoRep = async () => {
@@ -872,42 +874,10 @@ const AddNoNav = () => {
                               maxDateTime={new Date(maxDateTime)}
                               format="dd-MM-yy HH:mm"
                               {...field}
-                              // onChange={(newValue) => {
-                              //   const now = dayjs();
-                              //   const diffInDays = now.diff(
-                              //     dayjs(newValue),
-                              //     "day"
-                              //   );
-
-                              //   if (
-                              //     diffInDays <
-                              //     import.meta.env.VITE_FORWARD_PENJADWALAN_DAYS
-                              //   ) {
-                              //     showAlert(
-                              //       `Waktu tidak boleh lebih dari ${
-                              //         import.meta.env
-                              //           .VITE_FORWARD_PENJADWALAN_DAYS
-                              //       } hari ke depan.`,
-                              //       "error"
-                              //     );
-                              //     return;
-                              //   }
-
-                              //   if (
-                              //     diffInDays >
-                              //     import.meta.env.VITE_BACKDATE_DAYS
-                              //   ) {
-                              //     showAlert(
-                              //       `Waktu tidak boleh lebih dari ${
-                              //         import.meta.env.VITE_BACKDATE_DAYS
-                              //       } hari ke belakang.`,
-                              //       "error"
-                              //     );
-                              //     return;
-                              //   }
-
-                              //   field.onChange(newValue); // still update the form
-                              // }}
+                              onChange={(newValue) => {
+                                field.onChange(newValue);
+                                setValue("waktu_dtg", newValue);
+                              }}
                               slotProps={{
                                 textField: {
                                   fullWidth: true,
@@ -933,6 +903,7 @@ const AddNoNav = () => {
                               minDateTime={new Date(minDateTime)}
                               maxDateTime={new Date(maxDateTime)}
                               format="dd-MM-yy HH:mm"
+                              disabled={!waktuCall}
                               onChange={(newValue) => {
                                 const callTime = watch("waktu_call");
                                 if (
@@ -1136,31 +1107,10 @@ const AddNoNav = () => {
                               maxDateTime={new Date(maxDateTime)}
                               format="dd-MM-yy HH:mm"
                               {...field}
-                              // onChange={(newValue) => {
-                              //   const now = dayjs();
-                              //   const diffInDays = now.diff(
-                              //     dayjs(newValue),
-                              //     "day"
-                              //   );
-
-                              //   if (diffInDays < -maxForwardDays) {
-                              //     showAlert(
-                              //       `Waktu tidak boleh lebih dari ${maxForwardDays} hari ke depan.`,
-                              //       "error"
-                              //     );
-                              //     return;
-                              //   }
-
-                              //   if (diffInDays > maxBackdateDays) {
-                              //     showAlert(
-                              //       `Waktu tidak boleh lebih dari ${maxBackdateDays} hari ke belakang.`,
-                              //       "error"
-                              //     );
-                              //     return;
-                              //   }
-
-                              //   field.onChange(newValue);
-                              // }}
+                              onChange={(newValue) => {
+                                field.onChange(newValue);
+                                setValue("waktu_selesai", newValue);
+                              }}
                               slotProps={{
                                 textField: {
                                   fullWidth: true,
@@ -1187,6 +1137,7 @@ const AddNoNav = () => {
                               minDateTime={new Date(minDateTime)}
                               maxDateTime={new Date(maxDateTime)}
                               format="dd-MM-yy HH:mm"
+                              disabled={!waktuMulai}
                               onChange={(newValue) => {
                                 const mulaiTime = watch("waktu_mulai");
 

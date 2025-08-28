@@ -573,6 +573,14 @@ const TeknisiReport = () => {
                           displayEmpty
                         >
                           <MenuItem value="" key="groups-disabled">
+                            {/* <Typography
+                              sx={{
+                                color: "rgba(0, 0, 0, 0.35)",
+                                fontStyle: "italic",
+                              }}
+                            >
+                              Pilih Groups
+                            </Typography> */}
                             <em>Pilih Groups</em>
                           </MenuItem>
                           {areaGroups.map((item) => (

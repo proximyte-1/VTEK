@@ -86,7 +86,7 @@ const HistoryContract = () => {
         Historis Mesin
       </Typography>
       <Grid container spacing={5} marginY={"2em"} alignItems="center">
-        <Grid container spacing={5}>
+        <Grid container spacing={5} sx={{ width: "100%" }}>
           {uniqueNoSeri.length === 0 ? (
             <Grid size={12}>
               <Typography>No machine data available.</Typography>
@@ -105,10 +105,7 @@ const HistoryContract = () => {
                     </Typography>
                   </AccordionSummary>
                   <AccordionDetails>
-                    <TableContainer
-                      component={Paper}
-                      sx={{ borderRadius: "0 0 8px 8px" }}
-                    >
+                    <TableContainer component={Paper}>
                       <Table
                         sx={{ minWidth: 650 }}
                         aria-label={`data for machine ${noSeri}`}

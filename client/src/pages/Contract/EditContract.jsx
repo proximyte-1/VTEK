@@ -30,7 +30,7 @@ import { maxDateTime, minDateTime, selectService } from "../../utils/constants";
 import dayjs from "dayjs";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { ExpandMoreRounded } from "@mui/icons-material";
-import { displayValue } from "../../utils/helpers";
+import { displayFormatDateTime, displayValue } from "../../utils/helpers";
 import MultipleItemTableInput from "../../components/MultipleTableInput/MultipleItemTableInput";
 
 const EditContract = () => {
@@ -120,11 +120,10 @@ const EditContract = () => {
           }
           setValue(key, parsedValue, { shouldDirty: true });
         });
-
         fecthDataMesin();
         fetchCustomerData(data.no_cus);
       } catch (err) {
-        console.error("No data found or is missing");
+        console.error(`No data found or is missing: ${err}`);
         showAlert("Gagal mendapat data kontrak tidak ditemukan.", "error");
       }
     };

@@ -69,12 +69,25 @@ const NoNav = () => {
       renderCell: (params) => displayFormatDateTime(params.value),
     },
     {
-      field: "Status",
+      field: "status_appr",
       headerName: "Status",
       flex: 0,
       minWidth: 120,
+      // valueFormatter: (params) => {
+      //   switch (params.value) {
+      //     case 1:
+      //       return "Approve";
+      //     case 2:
+      //       return "Pending";
+      //     case 3:
+      //       return "Rejected";
+      //     default:
+      //       return "Unknown";
+      //   }
+      // },
+
       renderCell: (params) => {
-        if (params.row.status_appr === 2) {
+        if (params.value === 2) {
           return (
             <Chip
               color="warning"
@@ -83,7 +96,7 @@ const NoNav = () => {
               sx={{ width: "100%" }}
             />
           );
-        } else if (params.row.status_appr === 3) {
+        } else if (params.value === 3) {
           return (
             <Chip
               color="error"
@@ -148,6 +161,7 @@ const NoNav = () => {
 
   const { alert, showAlert, closeAlert } = useAlert();
   const [datas, setDatas] = useState([]);
+  const [user_appr, setUserApproval] = useState([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -158,7 +172,33 @@ const NoNav = () => {
         );
 
         const data = response.data;
+
+        const lk_arr = [];
+        Object.entries(data).map(([key, value]) => {
+          lk_arr.push(value.id);
+        });
+
+        await fetchUserApproval(JSON.stringify(lk_arr));
         setDatas(data); // <-- set the array into state
+      } catch (error) {
+        console.error("Error fetching items:", error);
+        showAlert("Terjadi kesalahan saat mengambil data!", "error");
+      }
+    };
+
+    const fetchUserApproval = async (data_arr) => {
+      // let cleanData = data_arr.replace("[", "(").replace("]", ")");
+      try {
+        const response = await axios.post(
+          import.meta.env.VITE_API_URL + `api/get-user-approval`,
+          {
+            data_lk: data_arr,
+          }
+        );
+
+        const data = response.data;
+
+        setUserApproval(data); // <-- set the array into state
       } catch (error) {
         console.error("Error fetching items:", error);
         showAlert("Terjadi kesalahan saat mengambil data!", "error");
@@ -242,7 +282,7 @@ const NoNav = () => {
           style={{ marginTop: "20px", marginBottom: "20px" }}
           onClick={() => navigate(`add`)}
         >
-          New Data
+          New
         </Button>
       )}
 

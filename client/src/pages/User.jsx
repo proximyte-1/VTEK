@@ -145,7 +145,7 @@ const User = () => {
           color="primary"
           style={{ marginTop: "20px" }}
         >
-          New Data
+          New
         </Button>
       </Link>
 
