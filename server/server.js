@@ -36,21 +36,33 @@ const SALT = 10;
 app.use(timeout("10s")); // Request timeout
 
 // Database config
+// const dbConfig = {
+//   server: process.env.DB_SERVER,
+//   user: process.env.DB_USER,
+//   password: process.env.DB_PASS,
+//   database: process.env.DB_DATABASE,
+//   options: {
+//     encrypt: false,
+//     trustServerCertificate: true,
+//   },
+//   pool: {
+//     max: 10, // Maximum number of connections
+//     min: 0, // Minimum number of connections
+//     idleTimeoutMillis: 30000, // Close idle connections after 30s
+//   },
+//   requestTimeout: 3000,
+// };
+
+// Local Database config
 const dbConfig = {
-  server: process.env.DB_SERVER,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASS,
-  database: process.env.DB_DATABASE,
+  server: process.env.LOCAL_DB_SERVER,
+  database: process.env.LOCAL_DB_DATABASE,
+  user: process.env.LOCAL_DB_USER,
+  password: process.env.LOCAL_DB_PASS,
   options: {
-    encrypt: false,
     trustServerCertificate: true,
+    enableArithAbort: true,
   },
-  pool: {
-    max: 10, // Maximum number of connections
-    min: 0, // Minimum number of connections
-    idleTimeoutMillis: 30000, // Close idle connections after 30s
-  },
-  requestTimeout: 3000,
 };
 
 let pool;
@@ -59,7 +71,8 @@ const initDB = async () => {
     pool = await sql.connect(dbConfig);
     console.log("✅ Connected to SQL Server");
   } catch (err) {
-    console.error("❌ DB Connection failed:", err);
+    console.error("❌ DB Connection failed:");
+    console.error(err);
     process.exit(1);
   }
 };
@@ -92,6 +105,12 @@ const formatDateForSQL = (input) => {
   const d = dayjs(input);
   return d.isValid() ? d.format("YYYY-MM-DD HH:mm:ss") : null;
 };
+
+const formatDateNoTimeForSQL = (input) => {
+  const d = dayjs(input);
+  return d.isValid() ? d.format("YYYY-MM-DD") : null;
+};
+
 const formatDatesForSQL = (input) => {
   const d = dayjs(input, "DD-MM-YYYY");
   return d.isValid() ? d.format("YYYY-MM-DD") : null;
@@ -171,6 +190,49 @@ const fetchNavData = (url = null, callback) => {
       );
     }
   );
+};
+
+const fetchNavPromise = (url) => {
+  return new Promise((resolve, reject) => {
+    httpntlm.get(
+      {
+        url,
+        username: process.env.NAV_USER,
+        password: process.env.NAV_PASS,
+        domain: process.env.NAV_DOMAIN,
+      },
+      (err, response) => {
+        if (err) {
+          return reject({
+            status: 500,
+            error: "Failed to fetch data",
+            details: err,
+          });
+        }
+
+        xml2js.parseString(
+          response.body,
+          { explicitArray: false },
+          (err, result) => {
+            if (err) {
+              return reject({
+                status: 500,
+                error: "Failed to parse XML",
+                details: err,
+              });
+            }
+
+            const entries = result?.feed?.entry || [];
+            const results = Array.isArray(entries)
+              ? entries.map((entry) => entry.content["m:properties"])
+              : [entries.content["m:properties"]];
+
+            resolve(results);
+          }
+        );
+      }
+    );
+  });
 };
 
 const requireLogin = (req, res, next) => {
@@ -409,11 +471,29 @@ app.get("/api/get-last-service", async (req, res) => {
 });
 
 app.get("/api/get-contract-lk", async (req, res) => {
-  const { no_cus } = req.query;
+  const { no_cus, no_seri } = req.query;
   try {
-    const result = await pool.query(
-      `SELECT * FROM dbo.${process.env.TABLE_CONTRACT} WHERE no_cus = '${no_cus}' ORDER BY tgl_contract_exp DESC`
+    const response_cus = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_CUSTOMER} WHERE no_cus = '${no_cus}'`
     );
+
+    console.log(response_cus);
+
+    const data = response_cus.recordset[0];
+
+    const result = await pool.query(
+      `SELECT TOP 1 machine.tgl_instalasi, con.type_service, con.tgl_contract, con.tgl_contract_exp 
+      FROM dbo.${process.env.TABLE_CONTRACT} AS con JOIN dbo.${process.env.TABLE_CONTRACT_MACHINE} as machine 
+      ON con.id = machine.id_contract
+      WHERE con.id_cus = '${data.id}' AND machine.no_seri = '${no_seri}' ORDER BY con.tgl_contract_exp DESC, machine.tgl_instalasi DESC`
+    );
+
+    console.log(`SELECT TOP 1 machine.tgl_instalasi, con.type_service, con.tgl_contract, con.tgl_contract_exp 
+      FROM dbo.${process.env.TABLE_CONTRACT} AS con JOIN dbo.${process.env.TABLE_CONTRACT_MACHINE} as machine 
+      ON con.id = machine.id_contract
+      WHERE con.id_cus = '${data.id}' AND machine.no_seri = '${no_seri}' ORDER BY con.tgl_contract_exp DESC, machine.tgl_instalasi DESC`);
+
+    console.log(result);
 
     res.json(result.recordset);
   } catch (err) {
@@ -611,9 +691,18 @@ app.get("/api/nav-data-noseri", (req, res) => {
 
   fetchNavData(navURL, (err, data) => {
     if (err) return res.status(err.status).json(err);
-    // const unique = [
-    //   ...new Set(data.map((item) => item["d:Sell_to_Customer_No"])),
-    // ];
+
+    // Step 1: Sort the data by d:Posting_Date in descending order
+    // We parse the date string from the `_` property
+    data.sort((a, b) => {
+      const dateA = new Date(a["d:Posting_Date"]["_"]);
+      const dateB = new Date(b["d:Posting_Date"]["_"]);
+      return dateB - dateA; // Sorts from newest to oldest
+    });
+
+    // Step 2: Filter the sorted data to get the unique records
+    // Because the data is sorted, the first occurrence of a unique customer
+    // will be their latest record.
     const unique = data.filter(
       (obj, index, self) =>
         index ===
@@ -621,6 +710,7 @@ app.get("/api/nav-data-noseri", (req, res) => {
           (t) => t["d:Sell_to_Customer_No"] === obj["d:Sell_to_Customer_No"]
         )
     );
+
     res.json(unique);
   });
 });
@@ -647,6 +737,64 @@ app.get("/api/nav-master-machine", (req, res) => {
     if (err) return res.status(err.status).json(err);
     res.json(data);
   });
+});
+
+app.get("/api/nav-customer-by-seri", async (req, res) => {
+  const { no_seri } = req.query;
+
+  try {
+    // Await the initial data fetch
+    const navURL =
+      process.env.NAV_WS_MASTER_MACHINE_URL +
+      navFilterEncode("Serial_No", no_seri);
+    const data = await fetchNavPromise(navURL);
+
+    // Use a for...of loop to process each item sequentially
+    for (const item of data) {
+      const cus_url =
+        process.env.NAV_WS_MASTER_CUSTOMER_URL +
+        navFilterEncode("No", item["d:Customer_Code"]);
+
+      // Await the customer data fetch for each item
+      const data_customer = await fetchNavPromise(cus_url);
+
+      // Assign the result to the item. This happens after the await, so it's guaranteed to be complete.
+      item["d:Name"] = data_customer[0]["d:Name_3"];
+      item["d:Address"] = data_customer[0]["d:Address_3"];
+    }
+
+    // Send the final, updated data array
+    res.json(data);
+  } catch (err) {
+    // Centralized error handling
+    console.error(err);
+    res.status(err.status || 500).json(err);
+  }
+});
+
+app.get("/api/nav-customer-by-nocus", async (req, res) => {
+  const { no_cus } = req.query;
+
+  try {
+    // Await the initial data fetch
+    const navURL =
+      process.env.NAV_WS_MASTER_CUSTOMER_URL + navFilterEncode("No", no_cus);
+    const data = await fetchNavPromise(navURL);
+
+    console.log(navURL);
+
+    fetchNavData(navURL, (err, data) => {
+      if (err)
+        return res
+          .status(err.status)
+          .json({ error: err, ok: false, data: null });
+      res.status(200).json({ ok: true, data: data });
+    });
+  } catch (err) {
+    // Centralized error handling
+    console.error(err);
+    res.status(err.status || 500).json(err);
+  }
 });
 // ==== FLK CRUD ====
 app.post("/api/create-flk", upload.single("pic"), async (req, res) => {
@@ -1035,108 +1183,6 @@ app.post("/api/export-data", async (req, res) => {
   return;
 });
 
-app.post("/api/export-data-customer", async (req, res) => {
-  try {
-    const { dari, sampai, jenis, no_cus } = req.body;
-
-    const conditions = [];
-    const request = pool.request();
-
-    if (jenis === "no_rep") {
-      conditions.push("type = @type");
-      request.input("type", 1);
-    } else if (jenis === "no_seri") {
-      conditions.push("type = @type");
-      request.input("type", 2);
-    }
-
-    if (dari && sampai) {
-      conditions.push(
-        "FORMAT(waktu_selesai, 'yyyy-MM-dd') BETWEEN @dari AND @sampai"
-      );
-      request.input("dari", dayjs(dari).format("YYYY-MM-DD"));
-      request.input("sampai", dayjs(sampai).format("YYYY-MM-DD"));
-    }
-
-    if (no_cus) {
-      conditions.push("no_cus = @no_cus");
-      request.input("no_cus", no_cus);
-    }
-
-    const whereClause =
-      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-    const query = `SELECT * FROM dbo.${process.env.TABLE_LK} ${whereClause} ORDER BY waktu_selesai, no_seri ASC`;
-
-    // execute
-    const result = await request.query(query);
-
-    res.json({
-      ok: true,
-      message: "Data get filter success",
-      data: result.recordset,
-    });
-  } catch (err) {
-    console.error("Get data filter error:", err);
-    res.status(500).send("Failed to get data filter");
-  }
-
-  return;
-});
-
-app.post("/api/export-data-area", async (req, res) => {
-  try {
-    const { dari, sampai, jenis, groups, kode_area } = req.body;
-
-    const conditions = [];
-    const request = pool.request();
-
-    if (jenis === "no_rep") {
-      conditions.push("type = @type");
-      request.input("type", 1);
-    } else if (jenis === "no_seri") {
-      conditions.push("type = @type");
-      request.input("type", 2);
-    }
-
-    if (dari && sampai) {
-      conditions.push(
-        "FORMAT(waktu_selesai, 'yyyy-MM-dd') BETWEEN @dari AND @sampai"
-      );
-      request.input("dari", dayjs(dari).format("YYYY-MM-DD"));
-      request.input("sampai", dayjs(sampai).format("YYYY-MM-DD"));
-    }
-
-    if (groups) {
-      conditions.push("area.groups = @groups");
-      request.input("groups", groups);
-    }
-
-    if (kode_area) {
-      conditions.push("area.kode_area = @kode_area");
-      request.input("kode_area", kode_area);
-    }
-
-    const whereClause =
-      conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
-    const query = `SELECT lk.* FROM dbo.${process.env.TABLE_LK} AS lk JOIN dbo.${process.env.TABLE_CUSTOMER} AS cus ON lk.no_cus = cus.no_cus
-JOIN dbo.${process.env.TABLE_AREA} AS area ON cus.kode_area = area.kode_area ${whereClause} ORDER BY lk.waktu_selesai, lk.no_seri ASC`;
-
-    // execute
-    const result = await request.query(query);
-
-    res.json({
-      ok: true,
-      message: "Data get filter success",
-      data: result.recordset,
-    });
-  } catch (err) {
-    console.error("Get data filter error:", err);
-    res.status(500).send("Failed to get data filter");
-  }
-
-  return;
-});
-
 app.post("/api/export-data-teknisi", async (req, res) => {
   try {
     const { dari, sampai, jenis, teknisi, kode_area, groups, no_cus, no_seri } =
@@ -1300,450 +1346,6 @@ app.post("/api/export-report", async (req, res) => {
       ["Tgl Akhir Kontrak", dataInfoVal.end_con || "-"],
       ["Jabatan", dataInfoVal.jabatan || "-"],
       ["No. Telp", dataInfoVal.telp || "-"],
-    ];
-
-    // Add a single row with this info (e.g., row 3)
-    const infoRow = worksheet.addRow([]);
-
-    // Split into chunks (3 items per row)
-    const chunkSize = 3;
-    for (let i = 0; i < infoArray.length; i += chunkSize) {
-      const chunk = infoArray.slice(i, i + chunkSize);
-      const row = worksheet.addRow([]);
-
-      let colIndex = 1;
-      chunk.forEach(([label, value]) => {
-        const labelCell = row.getCell(colIndex++);
-        // const equalsCell = row.getCell(colIndex++);
-        const valueCell = row.getCell(colIndex++);
-        const gapCell = row.getCell(colIndex++);
-
-        labelCell.value = label;
-        labelCell.font = { bold: true };
-
-        // equalsCell.value = "=";
-        // equalsCell.alignment = { horizontal: "center" };
-
-        valueCell.value = "= " + value;
-        valueCell.alignment = { wrapText: true, shrinkToFit: true };
-      });
-    }
-
-    worksheet.addRow([]);
-
-    // Assume your column setup
-    const mainHeaders = columns.map((col) => col.headerName);
-    const itemSubHeaders = ["Nama Barang", "No Barang", "Qty"];
-
-    // Header
-    const subHeaderRow = worksheet.addRow([...mainHeaders, ...itemSubHeaders]);
-    subHeaderRow.font = { bold: true };
-
-    // Style both rows
-    [subHeaderRow].forEach((row) => {
-      row.eachCell((cell) => {
-        cell.border = {
-          top: { style: "thin" },
-          bottom: { style: "thin" },
-          left: { style: "thin" },
-          right: { style: "thin" },
-        };
-        cell.alignment = {
-          vertical: "middle",
-          horizontal: "center",
-          wrapText: true,
-        };
-      });
-    });
-
-    // Write transaction roworksheet with items
-    mergedData.forEach((trx, index) => {
-      const itemCount = trx.barang.length || 1;
-
-      for (let i = 0; i < itemCount; i++) {
-        const item = trx.barang[i] || {};
-
-        // If frontend did not set 'no', we can override it here
-        if (i === 0 && !trx.no) trx.no = index + 1;
-
-        const baseFields = columns.map((col) =>
-          i === 0 ? trx[col.field] : "-"
-        );
-        const row = worksheet.addRow([
-          ...baseFields,
-          item.nama_brg || "-",
-          item.no_brg || "-",
-          item.qty || "-",
-        ]);
-
-        row.eachCell((cell) => {
-          cell.border = {
-            top: { style: "thin" },
-            left: { style: "thin" },
-            bottom: { style: "thin" },
-            right: { style: "thin" },
-          };
-        });
-      }
-
-      // Merge transaction info columns
-      if (itemCount > 1) {
-        for (let i = 0; i < columns.length; i++) {
-          const colLetter = worksheet.getColumn(i + 1).letter;
-          worksheet.mergeCells(
-            `${colLetter}${
-              worksheet.lastRow.number - itemCount + 1
-            }:${colLetter}${worksheet.lastRow.number}`
-          );
-        }
-      }
-    });
-
-    // Auto-fit columns
-    worksheet.columns.forEach((col) => {
-      let maxLength = 5;
-
-      col.eachCell({ includeEmpty: true }, (cell) => {
-        const val = cell.value ? cell.value.toString() : "";
-        maxLength = Math.max(maxLength, val.length);
-
-        // Apply wrap text + alignment to all cells
-        cell.alignment = {
-          wrapText: true,
-          vertical: "middle",
-          horizontal: "left",
-        };
-      });
-
-      // Set column width with padding
-      col.width = Math.min(maxLength + 2, 50); // Limit to max width
-    });
-
-    // Send the Excel file to the client
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename=${reportTitle || "report"}.xlsx`
-    );
-
-    await workbook.xlsx.write(res);
-    res.end();
-  } catch (err) {
-    console.error("Excel export error:", err);
-    res.status(500).send("Failed to generate Excel report");
-  }
-});
-
-app.post("/api/export-report-customer", async (req, res) => {
-  try {
-    const { data: data, reportTitle, columns } = req.body;
-
-    const dataIds = data.map((item) => item.id);
-    if (!dataIds.length) return res.status(400).send("No data received");
-
-    const barangResult = await pool.request().query(`
-      SELECT *
-      FROM dbo.${process.env.TABLE_BRG}
-      WHERE no_lk IN (${dataIds.map((id) => `'${id}'`).join(",")})
-    `);
-
-    const mapBarang = {};
-    for (const item of barangResult.recordset) {
-      const { no_lk, nama_brg, no_brg, qty } = item;
-      if (!mapBarang[no_lk]) {
-        mapBarang[no_lk] = [];
-      }
-      mapBarang[no_lk].push({
-        nama_brg: nama_brg,
-        no_brg: no_brg,
-        qty: qty,
-      });
-    }
-
-    const sanitizeFields = (data) => {
-      const sanitized = {};
-      for (const key in data) {
-        sanitized[key] =
-          data[key] != null && data[key] !== "" ? data[key] : "-";
-      }
-      return sanitized;
-    };
-
-    // Map items to transaction
-    const mergedData = data.map((trx) => {
-      const safeTrx = sanitizeFields(trx);
-
-      return {
-        ...safeTrx,
-        waktu_mulai: dayjs(trx.waktu_mulai).format("DD MMMM YYYY HH:mm"),
-        waktu_selesai: dayjs(trx.waktu_selesai).format("DD/MM/YYYY HH:mm"),
-        waktu_call: dayjs(trx.waktu_call).format("DD/MM/YYYY HH:mm"),
-        waktu_dtg: dayjs(trx.waktu_dtg).format("DD/MM/YYYY HH:mm"),
-        created_at: dayjs(trx.created_at).format("DD/MM/YYYY HH:mm"),
-        type: trx.type === 1 ? "Dengan Barang" : "Tanpa Barang",
-        barang: mapBarang[trx.id] || [],
-      };
-    });
-
-    // ====== Start Excel Export ======
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Report");
-
-    const customerDataResult = await pool.request().query(`
-      SELECT cus.no_cus, cus.alias, cus.kode_area, cus.nama_cus, area.groups, teknisi.name AS teknisi, spv.name AS spv FROM dbo.${process.env.TABLE_CUSTOMER} AS cus JOIN dbo.${process.env.TABLE_AREA} AS area ON cus.kode_area = area.kode_area JOIN dbo.${process.env.TABLE_USER} AS teknisi ON area.id_teknisi = teknisi.id JOIN dbo.${process.env.TABLE_USER} AS spv ON area.id_supervisor = spv.id WHERE cus.no_cus = '${mergedData[0].no_cus}'
-    `);
-
-    let dataInfoVal;
-    if (customerDataResult.recordset) {
-      dataInfoVal = customerDataResult.recordset[0];
-    }
-
-    // Title row
-    worksheet.mergeCells("A1", "I1");
-    worksheet.getCell("A1").value = reportTitle || "Export Report";
-    worksheet.getCell("A1").font = { bold: true, size: 16 };
-    worksheet.getCell("A1").alignment = { horizontal: "center" };
-    worksheet.addRow([]);
-
-    const infoArray = [
-      ["Nama Customer", dataInfoVal.nama_cus || "-"],
-      ["No. Customer", dataInfoVal.no_cus || "-"],
-      ["Alias", dataInfoVal.alias || "-"],
-      ["Kode Area", dataInfoVal.kode_area || "-"],
-      ["Groups", dataInfoVal.groups || "-"],
-      ["Teknisi", dataInfoVal.teknisi || "-"],
-      ["Supervisor", dataInfoVal.spv || "-"],
-    ];
-
-    // Add a single row with this info (e.g., row 3)
-    const infoRow = worksheet.addRow([]);
-
-    // Split into chunks (3 items per row)
-    const chunkSize = 3;
-    for (let i = 0; i < infoArray.length; i += chunkSize) {
-      const chunk = infoArray.slice(i, i + chunkSize);
-      const row = worksheet.addRow([]);
-
-      let colIndex = 1;
-      chunk.forEach(([label, value]) => {
-        const labelCell = row.getCell(colIndex++);
-        // const equalsCell = row.getCell(colIndex++);
-        const valueCell = row.getCell(colIndex++);
-        const gapCell = row.getCell(colIndex++);
-
-        labelCell.value = label;
-        labelCell.font = { bold: true };
-
-        // equalsCell.value = "=";
-        // equalsCell.alignment = { horizontal: "center" };
-
-        valueCell.value = "= " + value;
-        valueCell.alignment = { wrapText: true, shrinkToFit: true };
-      });
-    }
-
-    worksheet.addRow([]);
-
-    // Assume your column setup
-    const mainHeaders = columns.map((col) => col.headerName);
-    const itemSubHeaders = ["Nama Barang", "No Barang", "Qty"];
-
-    // Header
-    const subHeaderRow = worksheet.addRow([...mainHeaders, ...itemSubHeaders]);
-    subHeaderRow.font = { bold: true };
-
-    // Style both rows
-    [subHeaderRow].forEach((row) => {
-      row.eachCell((cell) => {
-        cell.border = {
-          top: { style: "thin" },
-          bottom: { style: "thin" },
-          left: { style: "thin" },
-          right: { style: "thin" },
-        };
-        cell.alignment = {
-          vertical: "middle",
-          horizontal: "center",
-          wrapText: true,
-        };
-      });
-    });
-
-    // Write transaction roworksheet with items
-    mergedData.forEach((trx, index) => {
-      const itemCount = trx.barang.length || 1;
-
-      for (let i = 0; i < itemCount; i++) {
-        const item = trx.barang[i] || {};
-
-        // If frontend did not set 'no', we can override it here
-        if (i === 0 && !trx.no) trx.no = index + 1;
-
-        const baseFields = columns.map((col) =>
-          i === 0 ? trx[col.field] : "-"
-        );
-        const row = worksheet.addRow([
-          ...baseFields,
-          item.nama_brg || "-",
-          item.no_brg || "-",
-          item.qty || "-",
-        ]);
-
-        row.eachCell((cell) => {
-          cell.border = {
-            top: { style: "thin" },
-            left: { style: "thin" },
-            bottom: { style: "thin" },
-            right: { style: "thin" },
-          };
-        });
-      }
-
-      // Merge transaction info columns
-      if (itemCount > 1) {
-        for (let i = 0; i < columns.length; i++) {
-          const colLetter = worksheet.getColumn(i + 1).letter;
-          worksheet.mergeCells(
-            `${colLetter}${
-              worksheet.lastRow.number - itemCount + 1
-            }:${colLetter}${worksheet.lastRow.number}`
-          );
-        }
-      }
-    });
-
-    // Auto-fit columns
-    worksheet.columns.forEach((col) => {
-      let maxLength = 5;
-
-      col.eachCell({ includeEmpty: true }, (cell) => {
-        const val = cell.value ? cell.value.toString() : "";
-        maxLength = Math.max(maxLength, val.length);
-
-        // Apply wrap text + alignment to all cells
-        cell.alignment = {
-          wrapText: true,
-          vertical: "middle",
-          horizontal: "left",
-        };
-      });
-
-      // Set column width with padding
-      col.width = Math.min(maxLength + 2, 50); // Limit to max width
-    });
-
-    // Send the Excel file to the client
-    res.setHeader(
-      "Content-Type",
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    );
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename=${reportTitle || "report"}.xlsx`
-    );
-
-    await workbook.xlsx.write(res);
-    res.end();
-  } catch (err) {
-    console.error("Excel export error:", err);
-    res.status(500).send("Failed to generate Excel report");
-  }
-});
-
-app.post("/api/export-report-area", async (req, res) => {
-  try {
-    const { data: data, reportTitle, columns, groups, kode_area } = req.body;
-
-    const dataIds = data.map((item) => item.id);
-    if (!dataIds.length) return res.status(400).send("No data received");
-
-    const barangResult = await pool.request().query(`
-      SELECT *
-      FROM dbo.${process.env.TABLE_BRG}
-      WHERE no_lk IN (${dataIds.map((id) => `'${id}'`).join(",")})
-    `);
-
-    const mapBarang = {};
-    for (const item of barangResult.recordset) {
-      const { no_lk, nama_brg, no_brg, qty } = item;
-      if (!mapBarang[no_lk]) {
-        mapBarang[no_lk] = [];
-      }
-      mapBarang[no_lk].push({
-        nama_brg: nama_brg,
-        no_brg: no_brg,
-        qty: qty,
-      });
-    }
-
-    const sanitizeFields = (data) => {
-      const sanitized = {};
-      for (const key in data) {
-        sanitized[key] =
-          data[key] != null && data[key] !== "" ? data[key] : "-";
-      }
-      return sanitized;
-    };
-
-    // Map items to transaction
-    const mergedData = data.map((trx) => {
-      const safeTrx = sanitizeFields(trx);
-
-      return {
-        ...safeTrx,
-        waktu_mulai: dayjs(trx.waktu_mulai).format("DD MMMM YYYY HH:mm"),
-        waktu_selesai: dayjs(trx.waktu_selesai).format("DD/MM/YYYY HH:mm"),
-        waktu_call: dayjs(trx.waktu_call).format("DD/MM/YYYY HH:mm"),
-        waktu_dtg: dayjs(trx.waktu_dtg).format("DD/MM/YYYY HH:mm"),
-        created_at: dayjs(trx.created_at).format("DD/MM/YYYY HH:mm"),
-        type: trx.type === 1 ? "Dengan Barang" : "Tanpa Barang",
-        barang: mapBarang[trx.id] || [],
-      };
-    });
-
-    // ====== Start Excel Export ======
-    const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet("Report");
-
-    const condition = [];
-
-    if (groups) {
-      condition.push(`groups = '${groups}'`);
-    }
-
-    if (kode_area) {
-      condition.push(`kode_area = '${kode_area}'`);
-    }
-
-    const whereClause =
-      condition.length > 0 ? ` WHERE ${condition.join(" AND ")}` : "";
-
-    const areaDataQuery = `SELECT area.kode_area, area.nama_area, area.groups, teknisi.name AS teknisi, spv.name AS spv FROM dbo.${process.env.TABLE_AREA} AS area JOIN dbo.${process.env.TABLE_USER} AS teknisi on area.id_teknisi = teknisi.id
-JOIN dbo.${process.env.TABLE_USER} AS spv ON area.id_supervisor = spv.id ${whereClause}`;
-
-    const areaDataResult = await pool.request().query(areaDataQuery);
-
-    let dataInfoVal;
-    if (areaDataResult.recordset) {
-      dataInfoVal = areaDataResult.recordset[0];
-    }
-
-    // Title row
-    worksheet.mergeCells("A1", "I1");
-    worksheet.getCell("A1").value = reportTitle || "Export Report";
-    worksheet.getCell("A1").font = { bold: true, size: 16 };
-    worksheet.getCell("A1").alignment = { horizontal: "center" };
-    worksheet.addRow([]);
-
-    const infoArray = [
-      ["Kode Area", dataInfoVal.kode_area || "-"],
-      ["Nama Area", dataInfoVal.nama_area || "-"],
-      ["Groups", dataInfoVal.groups || "-"],
-      ["Teknisi", dataInfoVal.teknisi || "-"],
-      ["Supervisor", dataInfoVal.spv || "-"],
     ];
 
     // Add a single row with this info (e.g., row 3)
@@ -2394,12 +1996,12 @@ app.post("/api/export-lk-noseri", async (req, res) => {
 
 // ==== USER CRUD ====
 app.post("/api/create-users", upload.none(), async (req, res) => {
-  const { name, email, role } = req.body;
+  const { name, email, role, created_by, kode_teknisi } = req.body;
 
   try {
     const query = `
-      INSERT INTO dbo.${process.env.TABLE_USER} (name, email, role, created_by)
-      VALUES ('${name}', '${email}', '${role}', '1')
+      INSERT INTO dbo.${process.env.TABLE_USER} (name, email, role, created_by, kode_teknisi)
+      VALUES ('${name}', '${email}', '${role}', '${created_by}', '${kode_teknisi}')
     `;
 
     const result = await pool.query(query);
@@ -2414,7 +2016,7 @@ app.post("/api/create-users", upload.none(), async (req, res) => {
 
 app.post("/api/edit-users", upload.none(), async (req, res) => {
   const { id } = req.query;
-  const { name, email, role } = req.body;
+  const { name, email, role, kode_teknisi } = req.body;
 
   const now = formatDateForSQL(dayjs());
 
@@ -2424,6 +2026,7 @@ app.post("/api/edit-users", upload.none(), async (req, res) => {
       SET [email] = '${email}'
       ,[role] = '${role}'
       ,[name] = '${name}'
+      ,[kode_teknisi] = '${kode_teknisi}'
       ,[updated_at] = '${now}'
       WHERE id = '${id}'
     `;
@@ -2515,11 +2118,15 @@ app.get("/api/reset-pass", async (req, res) => {
 
 // ==== CONTRACT CRUD ====
 app.get("/api/get-last-contract", async (req, res) => {
-  const { no_cus } = req.query;
+  const { id_cus } = req.query;
 
   try {
     const result = await pool.query(
-      `SELECT TOP 2 id, tgl_contract_exp FROM dbo.${process.env.TABLE_CONTRACT} WHERE no_cus = '${no_cus}' ORDER BY tgl_contract_exp DESC`
+      `SELECT TOP 2 id, tgl_contract_exp FROM dbo.${process.env.TABLE_CONTRACT} WHERE id_cus = '${id_cus}' ORDER BY tgl_contract_exp DESC`
+    );
+
+    console.log(
+      `SELECT TOP 2 id, tgl_contract_exp FROM dbo.${process.env.TABLE_CONTRACT} WHERE id_cus = '${id_cus}' ORDER BY tgl_contract_exp DESC`
     );
     res.json(result.recordset);
   } catch (err) {
@@ -2533,6 +2140,19 @@ app.get("/api/get-contract-by-id", async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT * FROM dbo.${process.env.TABLE_CONTRACT} WHERE id = '${id}'`
+    );
+    res.json(result.recordset);
+  } catch (err) {
+    res.status(500).json({ error: "Database error" });
+  }
+});
+
+app.get("/api/get-contract-by-customer-id", async (req, res) => {
+  const { id } = req.query;
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM dbo.${process.env.TABLE_CONTRACT} WHERE id_cus = '${id}'`
     );
     res.json(result.recordset);
   } catch (err) {
@@ -2641,8 +2261,15 @@ app.get("/api/get-contract-machine-history-by-id", async (req, res) => {
 });
 
 app.post("/api/create-contract", upload.none(), async (req, res) => {
-  const { id, no_seri, tgl_contract, type_service, tgl_contract_exp, no_cus } =
-    req.body;
+  const {
+    id,
+    no_seri,
+    tgl_contract,
+    type_service,
+    tgl_contract_exp,
+    id_cus,
+    created_by,
+  } = req.body;
 
   const serialNumbers = JSON.parse(no_seri);
   if (!Array.isArray(serialNumbers)) {
@@ -2657,9 +2284,11 @@ app.post("/api/create-contract", upload.none(), async (req, res) => {
     const contract_exp = formatDateForSQL(tgl_contract_exp);
 
     const query = `
-    INSERT INTO dbo.${process.env.TABLE_CONTRACT} (no_contract, tgl_contract, tgl_contract_exp, type_service, no_cus, created_by) OUTPUT INSERTED.id 
-    VALUES ('${id}', '${contract}', '${contract_exp}', '${type_service}', '${no_cus}', '1')
+    INSERT INTO dbo.${process.env.TABLE_CONTRACT} (no_contract, tgl_contract, tgl_contract_exp, type_service, id_cus, created_by) OUTPUT INSERTED.id 
+    VALUES ('${id}', '${contract}', '${contract_exp}', '${type_service}', '${id_cus}', '${created_by}')
     `;
+
+    console.log(query);
 
     const execute = await request.query(query);
     const contractId = execute.recordset[0].id;
@@ -2680,9 +2309,11 @@ app.post("/api/create-contract", upload.none(), async (req, res) => {
             '${item.no_seri}', 
             '${item.lokasi || ""}',
             '${inst || ""}',
-            1
+            '${created_by}'
           )
         `;
+
+        console.log(serialQuery);
 
         await request.query(serialQuery);
       } catch (serialError) {
@@ -2740,7 +2371,8 @@ app.post("/api/create-contract", upload.none(), async (req, res) => {
 
 app.post("/api/edit-contract", upload.none(), async (req, res) => {
   const { id } = req.query;
-  const { no_seri, tgl_contract, type_service, tgl_contract_exp } = req.body;
+  const { no_seri, tgl_contract, type_service, tgl_contract_exp, created_by } =
+    req.body;
 
   let transaction;
   try {
@@ -2764,8 +2396,8 @@ app.post("/api/edit-contract", upload.none(), async (req, res) => {
     const request = new sql.Request(transaction);
 
     // Format dates safely
-    const contractDate = formatDateForSQL(tgl_contract);
-    const contractExpDate = formatDateForSQL(tgl_contract_exp);
+    const contractDate = formatDateNoTimeForSQL(tgl_contract);
+    const contractExpDate = formatDateNoTimeForSQL(tgl_contract_exp);
 
     // 1. Update contract - USING PARAMETERIZED QUERY
     const updateContractQuery = `
@@ -2790,6 +2422,7 @@ app.post("/api/edit-contract", upload.none(), async (req, res) => {
        FROM dbo.${process.env.TABLE_CONTRACT_MACHINE} 
        WHERE id_contract = '${id}'`
     );
+
     const currentMachines = currentResult.recordset;
 
     // Process incoming machines
@@ -2818,7 +2451,7 @@ app.post("/api/edit-contract", upload.none(), async (req, res) => {
         await request.query(`
             INSERT INTO dbo.${process.env.TABLE_CONTRACT_MACHINE} 
             (no_seri, lokasi, id_contract, created_by, tgl_instalasi) 
-            VALUES ('${machine.no_seri}', '${machine.lokasi}', '${id}', 1, '${formatedTglInst}')
+            VALUES ('${machine.no_seri}', '${machine.lokasi}', '${id}', '${created_by}', '${formatedTglInst}')
           `);
       }
     }
@@ -3258,9 +2891,9 @@ app.post("/api/create-area", upload.none(), async (req, res) => {
         const query = `
         INSERT INTO dbo.${
           process.env.TABLE_AREA
-        } (kode_area, nama_area, groups, id_supervisor, updated_at, id_teknisi, approver)
-        VALUES ('${item.kode_area}', '${
-          item.nama_area
+        } (kode_area, groups, id_supervisor, updated_at, id_teknisi, approver)
+        VALUES ('${
+          item.kode_area
         }', '${groups}', '${id_supervisor}', '${formatDateForSQL(
           now
         )}', '${JSON.stringify(item.teknisi)}', '${id_approver}')
@@ -3503,7 +3136,16 @@ app.get("/api/get-kode-area", async (req, res) => {
 });
 
 app.post("/api/create-customer", upload.none(), async (req, res) => {
-  const { no_cus, nama_cus, alias, no_seri, kode_area } = req.body;
+  const {
+    no_cus,
+    nama_cus,
+    alias,
+    no_seri,
+    kode_area,
+    alamat,
+    created_by,
+    cp,
+  } = req.body;
   const now = dayjs();
 
   const transaction = new sql.Transaction(pool);
@@ -3514,10 +3156,10 @@ app.post("/api/create-customer", upload.none(), async (req, res) => {
     const query = `
       INSERT INTO dbo.${
         process.env.TABLE_CUSTOMER
-      } (no_cus, nama_cus, alias, no_seri, updated_at, created_by, kode_area)
+      } (no_cus, nama_cus, alias, no_seri, updated_at, created_by, kode_area, alamat, cp)
       VALUES ('${no_cus}', '${nama_cus}', '${alias}', '${no_seri}', '${formatDateForSQL(
       now
-    )}', '1', '${kode_area}')
+    )}', '${created_by}', '${kode_area}', '${alamat}', '${cp}')
     `;
 
     await request.query(query);
@@ -3553,7 +3195,7 @@ app.post("/api/create-customer", upload.none(), async (req, res) => {
 
 app.post("/api/edit-customer", upload.none(), async (req, res) => {
   const { id = "" } = req.query;
-  const { no_cus, nama_cus, alias, no_seri, kode_area } = req.body;
+  const { no_cus, nama_cus, alias, no_seri, kode_area, alamat, cp } = req.body;
 
   const now = dayjs();
   const transaction = new sql.Transaction(pool);
@@ -3566,7 +3208,7 @@ app.post("/api/edit-customer", upload.none(), async (req, res) => {
         process.env.TABLE_CUSTOMER
       } SET no_cus = '${no_cus}', nama_cus = '${nama_cus}', alias = '${alias}', no_seri = '${no_seri}', updated_at = '${formatDateForSQL(
       now
-    )}', kode_area = '${kode_area}' WHERE id = '${id}'
+    )}', kode_area = '${kode_area}', alamat = '${alamat}', cp = '${cp}' WHERE id = '${id}'
     `;
 
     await request.query(query);
@@ -3599,6 +3241,122 @@ app.post("/api/edit-customer", upload.none(), async (req, res) => {
     }
   }
 });
+
+// ===== SEARCH DATA ====
+app.post("/api/search-data", async (req, res) => {
+  try {
+    const { search_data } = req.body;
+
+    // IMPORTANT: Security Vulnerability
+    // Your current query uses string interpolation, which is vulnerable to SQL Injection attacks.
+    // It's highly recommended to use prepared statements or parameterized queries to prevent this.
+    // Example: request.input('search_data', sql.NVarChar, `%${search_data}%`);
+    // Then use @search_data in your query.
+    const search_query = `SELECT customer.id AS id_customer, contracts.id AS id_contract, machine.id AS id_machine, 
+    customer.nama_cus, customer.cp, contracts.no_contract, customer.alias, 
+customer.alamat, machine.no_seri, machine.tgl_instalasi, area.id_teknisi, area.id_supervisor, contracts.type_service, 
+contracts.tgl_contract_exp FROM
+dbo.${process.env.TABLE_CONTRACT} AS contracts
+JOIN dbo.${process.env.TABLE_CUSTOMER} AS customer ON contracts.id_cus = customer.id
+JOIN dbo.${process.env.TABLE_CONTRACT_MACHINE} AS machine ON machine.id_contract = contracts.id
+JOIN dbo.${process.env.TABLE_AREA} AS area ON customer.kode_area = area.id
+WHERE customer.nama_cus LIKE '%${search_data}%' OR customer.alias LIKE '%${search_data}%' OR machine.no_seri LIKE '%${search_data}%'
+ORDER BY customer.id, contracts.id, machine.id`;
+
+    // console.log(search_query);
+
+    // execute
+    const search_result = await pool.request().query(search_query);
+
+    if (search_result.rowsAffected[0] > 0) {
+      const data = search_result.recordset;
+
+      // Use a for...of loop instead of forEach.
+      // The for...of loop handles asynchronous operations correctly by waiting for each 'await' call.
+      for (const item of data) {
+        // Nama Teknisi
+        const data_id_teknisi = JSON.parse(item.id_teknisi);
+        if (data_id_teknisi) {
+          const resultTeknisi = `(${data_id_teknisi
+            .map((id) => `'${id}'`)
+            .join(",")})`;
+
+          // Use a new request object for each query to avoid conflicts.
+          const fetchTeknisi = await pool
+            .request()
+            .query(
+              `SELECT name, id FROM dbo.${process.env.TABLE_USER} WHERE id IN${resultTeknisi}`
+            );
+          const data_teknisi = fetchTeknisi.recordset;
+          const nama_teknisi = `${data_teknisi
+            .map((tek) => `${tek.name}`)
+            .join(", ")}`;
+          item.map_teknisi = nama_teknisi;
+          item.teknisi = data_teknisi;
+        }
+
+        // Nama SPV
+        const data_id_spv = JSON.parse(item.id_supervisor);
+        if (data_id_spv) {
+          const resultSPV = `(${data_id_spv.map((id) => `'${id}'`).join(",")})`;
+
+          // Use a new request object for each query to avoid conflicts.
+          const fetchSpv = await pool
+            .request()
+            .query(
+              `SELECT name, id FROM dbo.${process.env.TABLE_USER} WHERE id IN${resultSPV}`
+            );
+          const data_spv = fetchSpv.recordset;
+          const nama_spv = `${data_spv.map((spv) => `${spv.name}`).join(", ")}`;
+          item.map_supervisor = nama_spv;
+          item.supervisor = data_spv;
+        }
+
+        // Sisa Masa Contract
+        if (item.tgl_contract_exp) {
+          item.sisa_contract = sisaMasaContract(item.tgl_contract_exp);
+        }
+      }
+
+      // Send the final result after the loop completes.
+      res.json({
+        ok: true,
+        message: "Data get filter success",
+        data: search_result.recordset,
+      });
+    } else {
+      res.json({
+        ok: true,
+        message: "No data found",
+        data: [],
+      });
+    }
+  } catch (err) {
+    console.error("Get data filter error:", err);
+    res.status(500).send("Failed to get data filter");
+  }
+});
+
+const sisaMasaContract = (tgl_contract_exp) => {
+  // Check if tgl_contract_exp is null, undefined, or an invalid value
+  if (!tgl_contract_exp) {
+    return ""; // Return null or 0, depending on your needs
+  }
+
+  // The input data "2025-09-10T00:00:00.000Z" is already a valid ISO 8601 string.
+  // You don't need to manipulate it with .replace()
+  const contract_exp_date = new Date(tgl_contract_exp);
+  const current_date = new Date();
+
+  // Calculate the time difference in milliseconds
+  const differenceInMs = current_date.getTime() - contract_exp_date.getTime();
+
+  // Convert milliseconds to days
+  const differenceInDays = differenceInMs / (1000 * 60 * 60 * 24);
+
+  // Return the rounded difference in days
+  return Math.floor(differenceInDays);
+};
 
 // ==============================
 // ==============================

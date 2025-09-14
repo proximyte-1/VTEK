@@ -64,7 +64,7 @@ const ViewContract = () => {
         }
 
         fecthDataMesin();
-        fetchCustomerData(data.no_cus);
+        fetchCustomerData(data.id_cus);
       } catch (err) {
         console.error("No data found or is missing");
         showAlert("Gagal mendapat data kontrak tidak ditemukan.", "error");
@@ -74,29 +74,24 @@ const ViewContract = () => {
     fetchContractById();
   }, [id]);
 
-  const fetchCustomerData = async (no_cus) => {
+  const fetchCustomerData = async (id_cus) => {
     try {
-      const noCus = no_cus;
-
       const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}api/nav-by-no-cus`,
+        `${import.meta.env.VITE_API_URL}api/get-customer-by-id?id=${id_cus}`,
         {
-          params: {
-            no_cus: noCus,
-          },
           timeout: 5000,
         }
       );
 
-      if (!response.data.ok) {
-        showAlert("No customer tidak ditemukan dalam Navision.", "error");
-      }
+      const data = response.data[0];
 
-      const data = response.data.data[0];
-      setDataCustomer(data);
+      if (data) {
+        setDataCustomer(data);
+      }
 
       setExpand(false);
     } catch (error) {
+      console.log(error);
       showAlert("Gagal mengambil data dari server", "error");
     } finally {
       setLoading(false);
@@ -116,7 +111,6 @@ const ViewContract = () => {
       );
 
       const data = response.data;
-      console.log();
 
       if (data.length <= 0) {
         return;
@@ -155,22 +149,16 @@ const ViewContract = () => {
                   {/* Row 1 */}
                   <Grid size={{ xs: 12, md: 12 }}>
                     <Typography id="no_cus">
-                      No. Customer : {displayValue(data?.no_cus)}
+                      No. Customer : {displayValue(customer?.no_cus)}
                     </Typography>
                     <Typography>
-                      Nama Pelanggan :{" "}
-                      {displayValue(customer?.["d:Sell_to_Customer_Name"])}
+                      Nama Pelanggan : {displayValue(customer?.nama_cus)}
                     </Typography>
                     <Typography>
-                      Alias :{" "}
-                      {displayValue(customer?.["d:Sell_to_Customer_Name"])}
+                      Alias : {displayValue(customer?.alias)}
                     </Typography>
                     <Typography>
-                      Alamat : {displayValue(customer?.["d:Sell_to_Address"])}
-                    </Typography>
-                    <Typography>
-                      Penanggung Jawab :{" "}
-                      {displayValue(customer?.["d:Penanggung_jawab"])}
+                      Alamat : {displayValue(customer?.alamat)}
                     </Typography>
                   </Grid>
                 </Grid>

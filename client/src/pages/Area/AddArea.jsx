@@ -49,7 +49,6 @@ const AddArea = () => {
           yup.object().shape({
             id: yup.string().required(), // IDs are generated, but schema should know
             kode_area: yup.string().required("Kode Area is required"),
-            nama_area: yup.string().required("Nama Area is required"),
             teknisi: yup
               .array()
               .required("Teknisi is required")
@@ -268,7 +267,7 @@ const AddArea = () => {
               </Grid>
             )}
 
-            {dataApprover && (
+            {/* {dataApprover && (
               <Grid size={{ xs: 12, md: 6 }}>
                 <Controller
                   name="id_approver"
@@ -313,7 +312,7 @@ const AddArea = () => {
                   )}
                 />
               </Grid>
-            )}
+            )} */}
 
             <Grid container size={{ xs: 12, md: 12 }}>
               <Controller

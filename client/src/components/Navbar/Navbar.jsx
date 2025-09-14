@@ -35,9 +35,10 @@ const menu_flk = [
 ];
 
 const menu_master = [
-  { name: "Kontrak", endpoint: "/contract" },
   { name: "Area", endpoint: "/area" },
   { name: "Customer", endpoint: "/customer" },
+  { name: "Teknisi", endpoint: "/teknisi" },
+  // { name: "Kontrak", endpoint: "/contract" },
   // { name: "Instalasi", endpoint: "/instalasi" },
   // { name: "Global Settings", endpoint: "/settings" },
 ];

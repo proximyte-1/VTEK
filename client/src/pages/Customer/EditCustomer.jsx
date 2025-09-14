@@ -46,18 +46,13 @@ const EditCustomer = () => {
 
   const schema = useMemo(() => {
     return yup.object().shape({
-      no_cus: yup
-        .string()
-        .required()
-        .test("id-exists", "No Customer Telah Digunakan", function (value) {
-          if (!value || !idCustomer) return false;
-          const isDuplicate = idCustomer.some((item) => item.no_cus === value);
-          return !isDuplicate;
-        }),
+      no_cus: yup.string(),
+      no_seri: yup.string().required(),
+      alamat: yup.string().required(),
       alias: yup.string().required(),
       kode_area: yup.string().required(),
     });
-  }, [idCustomer]);
+  }, []);
 
   const {
     register,
@@ -73,8 +68,11 @@ const EditCustomer = () => {
     context: { isEdit: false },
     defaultValues: {
       no_cus: "",
+      no_seri: "",
+      alamat: "",
       alias: "",
       kode_area: "",
+      cp: "",
     },
   });
 
@@ -94,7 +92,6 @@ const EditCustomer = () => {
         });
 
         await getCustomerData(data.no_cus);
-        await getNoCus(data.no_cus);
         setExpand(false);
       } catch (err) {
         console.error("No data found or is missing");
@@ -105,7 +102,8 @@ const EditCustomer = () => {
     const getCustomerData = async (no_cus) => {
       try {
         const fetch_customer = await axios.get(
-          import.meta.env.VITE_API_URL + `api/nav-by-no-cus?no_cus=${no_cus}`
+          import.meta.env.VITE_API_URL +
+            `api/nav-customer-by-nocus?no_cus=${no_cus}`
         );
         const data = fetch_customer.data;
 
@@ -116,28 +114,6 @@ const EditCustomer = () => {
       } catch (error) {
         console.error("Error fetching customer:", error);
         showAlert("Gagal mengambil data dari server", "error");
-      }
-    };
-
-    const getNoCus = async (no_cus) => {
-      try {
-        axios
-          .get(
-            `${
-              import.meta.env.VITE_API_URL
-            }api/get-no-customer-edit?no_cus=${no_cus}`
-          )
-          .then((res) => {
-            if (res.data && Array.isArray(res.data) && res.data.length > 0) {
-              // Store the array of objects directly
-              setIdCustomer(res.data);
-            } else {
-              setIdCustomer([]);
-            }
-          });
-      } catch (err) {
-        console.error("Terjadi kesalahan saat memanggil data customer: ", err);
-        showAlert("Terjadi kesalahan saat memanggil data customer", "error");
       }
     };
 
@@ -230,13 +206,13 @@ const EditCustomer = () => {
             {/* Input Report */}
             <Grid size={{ xs: 12, md: 6 }}>
               <TextField
-                label="No. Customer"
+                label="No Seri"
                 variant="outlined"
                 fullWidth
-                {...register("no_cus")}
+                {...register("no_seri")}
                 disabled
-                error={!!errors.no_cus}
-                helperText={errors.no_cus?.message}
+                error={!!errors.no_seri}
+                helperText={errors.no_seri?.message}
               />
             </Grid>
             <Grid container spacing={5} size={12}>
@@ -257,14 +233,14 @@ const EditCustomer = () => {
                       {/* Row 1 */}
                       <Grid size={{ xs: 12, md: 12 }}>
                         <Typography>
-                          Nama Customer :{" "}
-                          {displayValue(
-                            dataCustomer?.["d:Sell_to_Customer_Name"]
-                          )}
+                          No Customer : {displayValue(dataCustomer?.["d:No"])}
                         </Typography>
                         <Typography>
-                          Alamat :{" "}
-                          {displayValue(dataCustomer?.["d:Sell_to_Address"])}
+                          Nama Customer :{" "}
+                          {displayValue(dataCustomer?.["d:Name_3"])}
+                        </Typography>
+                        <Typography>
+                          Alamat : {displayValue(dataCustomer?.["d:Address_3"])}
                         </Typography>
                       </Grid>
                     </Grid>
@@ -298,6 +274,40 @@ const EditCustomer = () => {
                           {...register("alias")}
                           error={!!errors.alias}
                           helperText={errors.alias?.message}
+                        />
+                      </Grid>
+
+                      <Grid size={{ xs: 12, md: 6 }}>
+                        <Typography
+                          sx={{ color: "rgba(0, 0, 0, 0.6)" }}
+                          id="alamat"
+                        >
+                          Alamat
+                        </Typography>
+                        <TextField
+                          variant="outlined"
+                          fullWidth
+                          multiline
+                          rows={3}
+                          {...register("alamat")}
+                          error={!!errors.alamat}
+                          helperText={errors.alamat?.message}
+                        />
+                      </Grid>
+
+                      <Grid size={{ xs: 12, md: 6 }}>
+                        <Typography
+                          sx={{ color: "rgba(0, 0, 0, 0.6)" }}
+                          id="cp"
+                        >
+                          Contact Person
+                        </Typography>
+                        <TextField
+                          variant="outlined"
+                          fullWidth
+                          {...register("cp")}
+                          error={!!errors.cp}
+                          helperText={errors.cp?.message}
                         />
                       </Grid>
 

@@ -35,7 +35,7 @@ const EditUsers = () => {
 
   useEffect(() => {
     // use for role checking
-    if (!user?.role?.includes(3) && !user?.role?.includes(4)) {
+    if (!user?.role?.includes(1) && !user?.role?.includes(2)) {
       navigate("/home", {
         state: {
           message: "Role Anda Bukan Admin!",
@@ -61,11 +61,13 @@ const EditUsers = () => {
       name: "",
       email: "",
       role: "",
+      kode_teknisi: "",
     },
   });
 
   const { alert, showAlert, closeAlert } = useAlert();
   const [loading, setLoading] = useState(false);
+  const [role_teknisi, setRoleTeknisi] = useState(false);
 
   useEffect(() => {
     async function fetchDataUser() {
@@ -77,6 +79,12 @@ const EditUsers = () => {
         const data = response.data[0];
         Object.entries(data).forEach(([key, value]) => {
           if (key === "role") {
+            if (JSON.parse(value).includes(7)) {
+              setRoleTeknisi(true);
+            } else {
+              setRoleTeknisi(false);
+            }
+
             setValue(key, JSON.parse(value), { shouldDirty: true });
           } else {
             setValue(key, value, { shouldDirty: true });
@@ -196,6 +204,12 @@ const EditUsers = () => {
                       option.id === value.id
                     }
                     onChange={(event, newValue) => {
+                      if (newValue.map((option) => option.id).includes(7)) {
+                        setRoleTeknisi(true);
+                      } else {
+                        setRoleTeknisi(false);
+                        setValue("kode_teknisi", "");
+                      }
                       // Pass an array of IDs to the form state
                       field.onChange(newValue.map((option) => option.id));
                     }}
@@ -221,6 +235,24 @@ const EditUsers = () => {
               )}
             />
           </Grid>
+
+          {role_teknisi && (
+            <Grid size={{ xs: 12, md: 6 }}>
+              <Typography
+                sx={{ color: "rgba(0, 0, 0, 0.6)" }}
+                id="kode_teknisi"
+              >
+                Kode Teknisi
+              </Typography>
+              <TextField
+                variant="outlined"
+                fullWidth
+                {...register("kode_teknisi")}
+                error={!!errors.kode_teknisi}
+                helperText={errors.kode_teknisi?.message}
+              />
+            </Grid>
+          )}
         </Grid>
 
         {/* Alert notifications */}

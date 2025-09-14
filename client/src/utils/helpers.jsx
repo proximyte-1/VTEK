@@ -77,6 +77,14 @@ export const columnsSelectCustomer = [
     ),
   },
   {
+    field: "tgl",
+    headerName: "Last Posting Date",
+    flex: 1,
+    renderCell: ({ row }) => (
+      <div>{displayFormatJustDate(displayValue(row["d:Posting_Date"]))}</div>
+    ),
+  },
+  {
     field: "nama_customer",
     headerName: "Nama Customer",
     flex: 1,
@@ -91,6 +99,41 @@ export const columnsSelectCustomer = [
     renderCell: ({ row }) => (
       <div>{displayValue(row["d:Sell_to_Address"])}</div>
     ),
+  },
+];
+
+export const columnsSelectCustomerNav = [
+  // {
+  //   field: "no",
+  //   headerName: "No.",
+  //   sortable: false,
+  //   renderCell: (params) => {
+  //     return params.api.getAllRowIds().indexOf(params.id) + 1;
+  //   },
+  // },
+  // {
+  //   field: "last_post",
+  //   headerName: "Last Invoice",
+  //   flex: 1,
+  //   renderCell: ({ row }) => <div>{displayValue(row["d:Customer_Code"])}</div>,
+  // },
+  {
+    field: "no_cus",
+    headerName: "No. Customer",
+    flex: 1,
+    renderCell: ({ row }) => <div>{displayValue(row["d:Customer_Code"])}</div>,
+  },
+  {
+    field: "nama_customer",
+    headerName: "Nama Customer",
+    flex: 1,
+    renderCell: ({ row }) => <div>{displayValue(row["d:Name"])}</div>,
+  },
+  {
+    field: "address",
+    headerName: "Address",
+    flex: 1,
+    renderCell: ({ row }) => <div>{displayValue(row["d:Address"])}</div>,
   },
 ];
 
@@ -172,6 +215,16 @@ export const displayValue = (data) => {
 
   // Fallback for other objects (e.g., nested structures)
   return "-";
+};
+
+export const displayFormatJustDate = (data) => {
+  if (!data) return "-";
+
+  const date = dayjs(data);
+
+  if (!date.isValid()) return "-";
+
+  return date.format("DD-MM-YYYY");
 };
 
 export const displayFormatDate = (data) => {

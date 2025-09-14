@@ -31,34 +31,40 @@ import { maxDateTime, minDateTime, selectService } from "../../utils/constants";
 import * as yup from "yup";
 import MultipleItemTableInput from "../../components/MultipleTableInput/MultipleItemTableInput";
 import { ExpandMoreRounded } from "@mui/icons-material";
-import { displayValue } from "../../utils/helpers";
+import {
+  columnsSelectCustomer,
+  columnsSelectCustomerNav,
+  displayValue,
+} from "../../utils/helpers";
+import { DataGrid } from "@mui/x-data-grid";
+import { useAuth } from "../../utils/auth";
 
 const AddCustomer = () => {
   const navigate = useNavigate();
 
+  const { user } = useAuth();
   const { alert, showAlert, closeAlert } = useAlert();
   const [loading, setLoading] = useState(false);
   const [idCustomer, setIdCustomer] = useState([]);
   const [dataCustomer, setDataCustomer] = useState([]);
+  const [list_select_customer, setListSelectCustomer] = useState([]);
+  const [selected_customer, setSelectedCustomer] = useState([]);
   const [kodeArea, setKodeArea] = useState([]);
   const [searched, setSearched] = useState(false);
   const [expand, setExpand] = useState(true);
+  const [expand_select_customer, setExpandSelectCustomer] = useState(true);
   const [retry, setRetry] = useState(false);
 
   const schema = useMemo(() => {
     return yup.object().shape({
-      no_cus: yup
-        .string()
-        .required()
-        .test("id-exists", "No Customer Sudah Digunakan", function (value) {
-          if (!value || !idCustomer) return false;
-          const isDuplicate = idCustomer.some((item) => item.no_cus === value);
-          return !isDuplicate;
-        }),
+      no_cus: yup.string(),
+      nama_cus: yup.string(),
+      no_seri: yup.string().required(),
+      alamat: yup.string().required(),
       alias: yup.string().required(),
       kode_area: yup.string().required(),
     });
-  }, [idCustomer]);
+  }, []);
 
   const {
     register,
@@ -74,8 +80,12 @@ const AddCustomer = () => {
     context: { isEdit: false },
     defaultValues: {
       no_cus: "",
+      nama_cus: "",
+      no_seri: "",
+      alamat: "",
       alias: "",
       kode_area: "",
+      cp: "",
     },
   });
 
@@ -117,25 +127,17 @@ const AddCustomer = () => {
       }
     };
 
-    getNoCus();
+    // getNoCus();
     getKodeArea();
   }, []);
 
   const handleSearch = async () => {
     setLoading(true);
 
-    const noCus = getValues("no_cus");
+    const no_seri = getValues("no_seri");
 
-    if (!noCus) {
-      showAlert("Terjadi kesalahan saat mencari data.", "error");
-      setSearched(false);
-      setLoading(false);
-      return;
-    }
-
-    // Check if no_rep is already used
-    if (idCustomer.some((item) => item.no_cus == noCus)) {
-      showAlert("Nomor Report Sudah Pernah Dipakai.", "error");
+    if (!no_seri) {
+      showAlert("Data nomor seri belum terisi.", "error");
       setSearched(false);
       setLoading(false);
       return;
@@ -143,11 +145,9 @@ const AddCustomer = () => {
 
     try {
       // Fetch customer data
-      const customer = await fetchDataCustomer(noCus);
+      const customer = await fetchListDataCustomer(no_seri);
 
-      setDataCustomer(customer);
-
-      setExpand(false);
+      setExpandSelectCustomer(false);
       setLoading(false);
     } catch (error) {
       console.error("Error in handleSearch:", error);
@@ -156,11 +156,39 @@ const AddCustomer = () => {
     }
   };
 
-  const fetchDataCustomer = async (no_cus) => {
+  const handleNoSeriSearch = async () => {
+    setLoading(true);
+    const data_alamat = selected_customer?.["d:Address"];
+    const data_no_cus = selected_customer?.["d:Customer_Code"];
+    const data_name = selected_customer?.["d:Name"];
+
+    if (!data_alamat) {
+      showAlert("Terjadi kesalahan saat mencari data.", "error");
+      return;
+    }
+
+    try {
+      setValue("alamat", data_alamat);
+      setValue("no_cus", data_no_cus);
+      setValue("nama_cus", data_name);
+
+      setExpand(false);
+      setSearched(true);
+      setLoading(false);
+    } catch (error) {
+      console.error("Error in handleSearch:", error);
+      showAlert("Terjadi kesalahan saat mencari data.", "error");
+      setLoading(false);
+    }
+  };
+
+  const fetchListDataCustomer = async (no_seri) => {
     try {
       const fetch_customer = await axios.get(
-        import.meta.env.VITE_API_URL + `api/nav-by-no-cus?no_cus=${no_cus}`
+        import.meta.env.VITE_API_URL +
+          `api/nav-customer-by-seri?no_seri=${no_seri}`
       );
+      console.log(fetch_customer);
       const data = fetch_customer.data;
 
       if (data.length <= 0) {
@@ -169,13 +197,10 @@ const AddCustomer = () => {
         return null;
       }
 
-      const customerData = data.data[0];
-
       showAlert("Nomor Customer Tersedia", "success");
-      setSearched(true);
-      setDataCustomer(customerData);
+      setListSelectCustomer(data);
 
-      return customerData;
+      return data;
     } catch (error) {
       console.error("Error fetching customer:", error);
       showAlert("Gagal mengambil data dari server", "error");
@@ -193,7 +218,7 @@ const AddCustomer = () => {
         data.append(key, value);
       });
 
-      data.append("nama_cus", dataCustomer["d:Sell_to_Customer_Name"]);
+      data.append("created_by", user?.id_user || "0");
 
       // Submit main form
       const response = await axios.post(
@@ -228,7 +253,7 @@ const AddCustomer = () => {
 
   const onInvalid = (errors) => {
     showAlert(
-      "Terjadi kesalahan pada input data mohon check kembali.",
+      `Terjadi kesalahan pada input data mohon check kembali.`,
       "error"
     );
   };
@@ -251,12 +276,12 @@ const AddCustomer = () => {
             {/* Input Report */}
             <Grid size={{ xs: 12, md: 6 }}>
               <TextField
-                label="No. Customer"
+                label="No Seri (Navision)"
                 variant="outlined"
                 fullWidth
-                {...register("no_cus")}
-                error={!!errors.no_cus}
-                helperText={errors.no_cus?.message}
+                {...register("no_seri")}
+                error={!!errors.no_seri}
+                helperText={errors.no_seri?.message}
               />
             </Grid>
             <Grid size={{ xs: 12, md: 6 }}>
@@ -273,11 +298,63 @@ const AddCustomer = () => {
                 {loading ? <CircularProgress size={24} /> : "Search"}
               </Button>
             </Grid>
+            {/* Select Customer fo the No. Seri */}
+            {!expand_select_customer && (
+              <Grid size={12}>
+                <Accordion expanded={!expand_select_customer}>
+                  <AccordionSummary
+                    expandIcon={<ExpandMoreRounded />}
+                    aria-controls="panel1-content"
+                    id="panel1-header"
+                  >
+                    <Typography component="span" variant="h5">
+                      Select Customer
+                    </Typography>
+                  </AccordionSummary>
+                  <AccordionDetails>
+                    {/* Table */}
+                    <Box sx={{ width: "100%", overflowX: "auto" }}>
+                      <Box sx={{ minWidth: 700 }}>
+                        <DataGrid
+                          rows={list_select_customer}
+                          columns={columnsSelectCustomerNav}
+                          getRowId={(row) => row["d:Customer_Code"]}
+                          initialState={{
+                            pagination: {
+                              paginationModel: {
+                                pageSize: 15,
+                              },
+                            },
+                          }}
+                          pageSizeOptions={[15]}
+                          onRowClick={(params) => {
+                            setSelectedCustomer(params.row);
+                            console.log("Row Customer clicked:", params.row);
+                          }}
+                        />
+                      </Box>
+                    </Box>
+                    <Button
+                      type="button"
+                      name="search"
+                      id="search"
+                      variant="contained"
+                      color="primary"
+                      onClick={handleNoSeriSearch}
+                      sx={{ marginTop: 2 }}
+                      disabled={loading}
+                    >
+                      {loading ? <CircularProgress size={24} /> : "Select"}
+                    </Button>
+                  </AccordionDetails>
+                </Accordion>
+              </Grid>
+            )}
             <Grid container spacing={5} size={12}>
               {/* Accordion 1 - Non Input */}
               <Grid size={12}>
                 <Accordion
-                  disabled={!searched || !getValues("no_cus")}
+                  disabled={!searched || !getValues("no_seri")}
                   expanded={!expand}
                 >
                   <AccordionSummary
@@ -294,14 +371,16 @@ const AddCustomer = () => {
                       {/* Row 1 */}
                       <Grid size={{ xs: 12, md: 12 }}>
                         <Typography>
+                          No Customer :{" "}
+                          {displayValue(selected_customer?.["d:Customer_Code"])}
+                        </Typography>
+                        <Typography>
                           Nama Customer :{" "}
-                          {displayValue(
-                            dataCustomer?.["d:Sell_to_Customer_Name"]
-                          )}
+                          {displayValue(selected_customer?.["d:Name"])}
                         </Typography>
                         <Typography>
                           Alamat :{" "}
-                          {displayValue(dataCustomer?.["d:Sell_to_Address"])}
+                          {displayValue(selected_customer?.["d:Address"])}
                         </Typography>
                       </Grid>
                     </Grid>
@@ -312,7 +391,7 @@ const AddCustomer = () => {
               <Grid size={12}>
                 <Accordion
                   expanded={!expand}
-                  disabled={!searched || !getValues("no_cus")}
+                  disabled={!searched || !getValues("no_seri")}
                 >
                   <AccordionSummary
                     expandIcon={<ExpandMoreRounded />}
@@ -338,6 +417,40 @@ const AddCustomer = () => {
                           {...register("alias")}
                           error={!!errors.alias}
                           helperText={errors.alias?.message}
+                        />
+                      </Grid>
+
+                      <Grid size={{ xs: 12, md: 6 }}>
+                        <Typography
+                          sx={{ color: "rgba(0, 0, 0, 0.6)" }}
+                          id="alamat"
+                        >
+                          Alamat
+                        </Typography>
+                        <TextField
+                          variant="outlined"
+                          fullWidth
+                          multiline
+                          rows={3}
+                          {...register("alamat")}
+                          error={!!errors.alamat}
+                          helperText={errors.alamat?.message}
+                        />
+                      </Grid>
+
+                      <Grid size={{ xs: 12, md: 6 }}>
+                        <Typography
+                          sx={{ color: "rgba(0, 0, 0, 0.6)" }}
+                          id="cp"
+                        >
+                          Contact Person
+                        </Typography>
+                        <TextField
+                          variant="outlined"
+                          fullWidth
+                          {...register("cp")}
+                          error={!!errors.cp}
+                          helperText={errors.cp?.message}
                         />
                       </Grid>
 

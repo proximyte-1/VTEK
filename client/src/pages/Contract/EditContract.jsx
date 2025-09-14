@@ -32,9 +32,11 @@ import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { ExpandMoreRounded } from "@mui/icons-material";
 import { displayFormatDateTime, displayValue } from "../../utils/helpers";
 import MultipleItemTableInput from "../../components/MultipleTableInput/MultipleItemTableInput";
+import { useAuth } from "../../utils/auth";
 
 const EditContract = () => {
-  const { id } = useParams();
+  const { id, id_contract } = useParams();
+  const { user } = useAuth();
   const navigate = useNavigate();
 
   const { alert, showAlert, closeAlert } = useAlert();
@@ -58,11 +60,17 @@ const EditContract = () => {
             id: yup.string().required(), // IDs are generated, but schema should know
             no_seri: yup.string().required("No. Seri is required"),
             lokasi: yup.string().required("Lokasi is required"),
+            tgl_instalasi: yup
+              .string()
+              .required("Tanggal Instalasi is required"),
           })
         )
         .min(1, "Minimal 1 mesin di masukkan."), // Example: minimum 1 item,
       type_service: yup.string().required(),
-      tgl_contract_exp: yup.date().required(),
+      tgl_contract_exp: yup
+        .date()
+        .min(yup.ref("tgl_contract"), "End date must be after start date")
+        .required(),
       tgl_contract: yup
         .date()
         .required("Required")
@@ -107,7 +115,9 @@ const EditContract = () => {
     const fetchContractById = async () => {
       try {
         const response = await axios.get(
-          `${import.meta.env.VITE_API_URL}api/get-contract-by-id?id=${id}`
+          `${
+            import.meta.env.VITE_API_URL
+          }api/get-contract-by-id?id=${id_contract}`
         );
 
         const data = response.data[0];
@@ -121,7 +131,7 @@ const EditContract = () => {
           setValue(key, parsedValue, { shouldDirty: true });
         });
         fecthDataMesin();
-        fetchCustomerData(data.no_cus);
+        fetchCustomerData(data.id_cus);
       } catch (err) {
         console.error(`No data found or is missing: ${err}`);
         showAlert("Gagal mendapat data kontrak tidak ditemukan.", "error");
@@ -131,13 +141,13 @@ const EditContract = () => {
     fetchContractById();
   }, [id]);
 
-  const fetchLastContract = async (no_cus) => {
+  const fetchLastContract = async (id_cus) => {
     try {
       const response = await axios.get(
         `${import.meta.env.VITE_API_URL}api/get-last-contract`,
         {
           params: {
-            no_cus: no_cus,
+            id_cus: id_cus,
           },
         }
       );
@@ -150,7 +160,11 @@ const EditContract = () => {
       }
 
       if (data?.[0]?.tgl_contract_exp && data.length > 1) {
-        setLastCont(data?.[0]?.tgl_contract);
+        if (data?.[0]?.id == id_contract) {
+          setLastCont(data?.[1]?.tgl_contract_exp);
+        } else {
+          setLastCont(data?.[0]?.tgl_contract_exp);
+        }
       } else {
         setLastCont(null);
       }
@@ -160,28 +174,24 @@ const EditContract = () => {
     }
   };
 
-  const fetchCustomerData = async (no_cus) => {
+  const fetchCustomerData = async (id_cus) => {
     try {
-      const noCus = no_cus;
-
       const response = await axios.get(
-        `${import.meta.env.VITE_API_URL}api/nav-by-no-cus`,
+        `${import.meta.env.VITE_API_URL}api/get-customer-by-id?id=${id_cus}`,
         {
-          params: {
-            no_cus: noCus,
-          },
           timeout: 5000,
         }
       );
 
-      if (!response.data.ok) {
-        showAlert("No customer tidak ditemukan dalam Navision.", "error");
-        setSearched(false);
+      const data = response.data[0];
+
+      if (data) {
+        setDataCustomer(data);
       }
 
-      const data = response.data.data[0];
-      setDataCustomer(data);
-      await fetchLastContract(displayValue(data?.["d:Sell_to_Customer_No"]));
+      await fetchLastContract(displayValue(id));
+
+      setValue("no_cus", data.no_cus);
 
       setSearched(true);
       setExpand(false);
@@ -223,7 +233,6 @@ const EditContract = () => {
 
   const onSubmit = async (values) => {
     setLoading(true);
-    // return;
 
     try {
       const data = new FormData();
@@ -254,7 +263,7 @@ const EditContract = () => {
       } else {
         setLoading(false);
         setRetry(false);
-        navigate("/contract", {
+        navigate(`/customer/contract/${id}`, {
           state: {
             message: "Data Kontrak Berhasil Diubah!",
             severity: "success",
@@ -332,32 +341,15 @@ const EditContract = () => {
                       {/* Row 1 */}
                       <Grid size={{ xs: 12, md: 12 }}>
                         <Typography>
-                          Nama Pelanggan :{" "}
-                          {displayValue(customer?.["d:Sell_to_Customer_Name"])}
+                          Nama Pelanggan : {displayValue(customer?.nama_cus)}
                         </Typography>
                         <Typography>
-                          Alias :{" "}
-                          {displayValue(customer?.["d:Sell_to_Customer_Name"])}
+                          Alias : {displayValue(customer?.alias)}
                         </Typography>
                         <Typography>
-                          Alamat :{" "}
-                          {displayValue(customer?.["d:Sell_to_Address"])}
-                        </Typography>
-                        <Typography>
-                          Penanggung Jawab :{" "}
-                          {displayValue(customer?.["d:Penanggung_jawab"])}
+                          Alamat : {displayValue(customer?.alamat)}
                         </Typography>
                       </Grid>
-                      {/* Row 2 */}
-                      {/* <Grid size={{ xs: 12, md: 6 }}>
-                          <Grid>
-                            <Typography>Kode Area :</Typography>
-                            <Typography>Group :</Typography>
-                          </Grid>
-                          <Typography>Supervisor :</Typography>
-                          <Typography>Teknisi :</Typography>
-                          <Typography>C.S.O :</Typography>
-                        </Grid> */}
                     </Grid>
                   </AccordionDetails>
                 </Accordion>

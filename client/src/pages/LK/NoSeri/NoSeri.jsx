@@ -68,42 +68,42 @@ const NoSeri = () => {
       minWidth: 150,
       renderCell: (params) => displayFormatDateTime(params.value),
     },
-    {
-      field: "Status",
-      headerName: "Status",
-      flex: 0,
-      minWidth: 120,
-      renderCell: (params) => {
-        if (params.row.status_appr === 2) {
-          return (
-            <Chip
-              color="warning"
-              icon={<PauseCircleFilledIcon />}
-              label="Pending"
-              sx={{ width: "100%" }}
-            />
-          );
-        } else if (params.row.status_appr === 3) {
-          return (
-            <Chip
-              color="error"
-              icon={<DangerousIcon />}
-              label="Rejected"
-              sx={{ width: "100%" }}
-            />
-          );
-        } else {
-          return (
-            <Chip
-              color="success"
-              icon={<CheckCircleIcon />}
-              label="Approve"
-              sx={{ width: "100%" }}
-            />
-          );
-        }
-      },
-    },
+    // {
+    //   field: "Status",
+    //   headerName: "Status",
+    //   flex: 0,
+    //   minWidth: 120,
+    //   renderCell: (params) => {
+    //     if (params.row.status_appr === 2) {
+    //       return (
+    //         <Chip
+    //           color="warning"
+    //           icon={<PauseCircleFilledIcon />}
+    //           label="Pending"
+    //           sx={{ width: "100%" }}
+    //         />
+    //       );
+    //     } else if (params.row.status_appr === 3) {
+    //       return (
+    //         <Chip
+    //           color="error"
+    //           icon={<DangerousIcon />}
+    //           label="Rejected"
+    //           sx={{ width: "100%" }}
+    //         />
+    //       );
+    //     } else {
+    //       return (
+    //         <Chip
+    //           color="success"
+    //           icon={<CheckCircleIcon />}
+    //           label="Approve"
+    //           sx={{ width: "100%" }}
+    //         />
+    //       );
+    //     }
+    //   },
+    // },
     {
       field: "actions",
       headerName: "Actions",
@@ -116,14 +116,14 @@ const NoSeri = () => {
       align: "center",
       renderCell: (params) => (
         <>
-          {!user?.role?.includes(5) && !user?.role?.includes(6) && (
+          {/* {!user?.role?.includes(5) && !user?.role?.includes(6) && (
             <IconButton
               variant="contained"
               onClick={() => navigate(`view/id=${params.row.id}`)}
             >
               <VisibilityIcon />
             </IconButton>
-          )}
+          )} */}
 
           {!user?.role?.includes(5) && !user?.role?.includes(6) && (
             <IconButton

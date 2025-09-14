@@ -38,6 +38,7 @@ import AreaReport from "./pages/Report/AreaReport";
 import CustomerReport from "./pages/Report/CustomerReport";
 import TeknisiReport from "./pages/Report/TeknisiReport";
 import ViewLK from "./pages/LK/ViewLK";
+import CustomerContract from "./pages/Customer/Contract/CustomerContract";
 
 function App() {
   return (
@@ -66,6 +67,13 @@ function App() {
 
             {/* Users Group */}
             <Route path="users">
+              <Route index element={<Users />} />
+              <Route path="add" element={<AddUsers />} />
+              <Route path="edit/:id" element={<EditUsers />} />
+            </Route>
+
+            {/* Teknisi Group */}
+            <Route path="teknisi">
               <Route index element={<Users />} />
               <Route path="add" element={<AddUsers />} />
               <Route path="edit/:id" element={<EditUsers />} />
@@ -101,6 +109,21 @@ function App() {
               <Route index element={<Customer />} />
               <Route path="add" element={<AddCustomer />} />
               <Route path="edit/:id" element={<EditCustomer />} />
+              <Route path="contract/:id">
+                <Route index element={<CustomerContract />} />
+                <Route path="add" element={<AddContract />} />
+                <Route path="edit/:id_contract" element={<EditContract />} />
+                <Route path="view/:id" element={<ViewContract />} />
+                <Route
+                  path="view-origin/:id"
+                  element={<ViewOriginContract />}
+                />
+                <Route
+                  path="instalasi/:id"
+                  element={<AddInstalasi_Contract />}
+                />
+                <Route path="history/:id" element={<HistoryContract />} />
+              </Route>
             </Route>
 
             {/* Login / Auth Group */}

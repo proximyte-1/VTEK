@@ -17,11 +17,9 @@ import {
   AccordionSummary,
   AccordionDetails,
   Box,
-  FormHelperText,
-  FormControl,
 } from "@mui/material";
 import { useAlert } from "../../utils/alert";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useForm, Controller } from "react-hook-form";
 import { yupResolver } from "@hookform/resolvers/yup";
 import axios from "axios";
@@ -35,12 +33,9 @@ import { ExpandMoreRounded } from "@mui/icons-material";
 import MultipleItemTableInput from "../../components/MultipleTableInput/MultipleItemTableInput";
 import e from "connect-timeout";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
-import { useAuth } from "../../utils/auth";
 
 const AddContract = () => {
   const navigate = useNavigate();
-  const { id } = useParams();
-  const { user } = useAuth();
 
   const { alert, showAlert, closeAlert } = useAlert();
   const [searched, setSearched] = useState(false);
@@ -70,10 +65,7 @@ const AddContract = () => {
         )
         .min(1, "Minimal 1 mesin di masukkan."), // Example: minimum 1 item,
       type_service: yup.string().required(),
-      tgl_contract_exp: yup
-        .date()
-        .min(yup.ref("tgl_contract"), "End date must be after start date")
-        .required(),
+      tgl_contract_exp: yup.date().required(),
       tgl_contract: yup
         .date()
         .required("Required")
@@ -113,68 +105,90 @@ const AddContract = () => {
 
   // Optional: Watch the lineItems field to display its current value
   const watchedNoSeri = watch("no_seri");
+  // const noSeri = watch("no_seri");
 
-  useEffect(() => {
-    const fetchDataCustomer = async () => {
-      try {
-        const response = await axios.get(
-          `${import.meta.env.VITE_API_URL}api/get-customer-by-id?id=${id}`,
-          {
-            timeout: 5000,
-          }
-        );
+  // useEffect(() => {
+  //   if (noSeri) {
+  //     axios
+  //       .get(
+  //         `${
+  //           import.meta.env.VITE_API_URL
+  //         }api/get-last-contract?no_seri=${noSeri}`
+  //       )
+  //       .then((res) => {
+  //         if (res.data.length === 0) {
+  //           setLastCont(null);
+  //         } else {
+  //           const rawDate = res.data?.[0]?.tgl_contract;
+  //           const parsed = dayjs(rawDate);
+  //           setLastCont(parsed);
+  //         }
+  //       });
+  //   }
+  // }, [noSeri]);
 
-        const data = response.data[0];
+  const handleSearch = async () => {
+    setLoading(true);
 
-        if (data) {
-          setDataCustomer(data);
+    try {
+      const noCus = getValues("no_cus");
+
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}api/nav-by-no-cus`,
+        {
+          params: {
+            no_cus: noCus,
+          },
+          timeout: 5000,
         }
+      );
 
-        await fetchLastContract(displayValue(id));
-
-        setValue("no_cus", data.no_cus);
-
-        setSearched(true);
-        setExpand(false);
-      } catch (error) {
-        console.log(error);
-        showAlert("Gagal mengambil data dari server", "error");
-      } finally {
-        setLoading(false);
+      if (!response.data.ok) {
+        showAlert("No customer tidak ditemukan dalam Navision.", "error");
+        setSearched(false);
       }
-    };
 
-    const fetchLastContract = async (id_cus) => {
-      try {
-        const response = await axios.get(
-          `${import.meta.env.VITE_API_URL}api/get-last-contract`,
-          {
-            params: {
-              id_cus: id_cus,
-            },
-          }
-        );
+      const data = response.data.data[0];
+      setDataCustomer(data);
+      await fetchLastContract(displayValue(data?.["d:Sell_to_Customer_No"]));
 
-        const data = response.data;
+      setSearched(true);
+      setExpand(false);
+    } catch (error) {
+      showAlert("Gagal mengambil data dari server" + error, "error");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-        if (data.length <= 0) {
-          setLastCont(null);
-          return;
+  const fetchLastContract = async (no_cus) => {
+    try {
+      const response = await axios.get(
+        `${import.meta.env.VITE_API_URL}api/get-last-contract`,
+        {
+          params: {
+            no_cus: no_cus,
+          },
         }
+      );
 
-        if (data?.[0]?.tgl_contract_exp && data.length > 1) {
-          setLastCont(data?.[0]?.tgl_contract_exp);
-        } else {
-          setLastCont(null);
-        }
-      } catch (error) {
-        console.error("Error fetching last contract:", error);
-        showAlert("Gagal mengambil service sebelumnya", "error");
+      const data = response.data;
+
+      if (data.length <= 0) {
+        setLastCont(null);
+        return;
       }
-    };
 
-    fetchDataCustomer();
-  }, []);
+      if (data?.[0]?.tgl_contract && data.length > 1) {
+        setLastCont(data?.[0]?.tgl_contract);
+      } else {
+        setLastCont(null);
+      }
+    } catch (error) {
+      console.error("Error fetching last contract:", error);
+      showAlert("Gagal mengambil service sebelumnya", "error");
+    }
+  };
 
   const handleIdContract = async (type_service) => {
     try {
@@ -224,7 +238,7 @@ const AddContract = () => {
   };
 
   const onSubmit = async (values) => {
-    setLoading(true);
+    // setLoading(true);
 
     try {
       const data = new FormData();
@@ -257,9 +271,6 @@ const AddContract = () => {
         }
       }
 
-      data.append("id_cus", id);
-      data.append("created_by", user?.id_user || "0");
-
       // Submit main form
       const response = await axios.post(
         `${import.meta.env.VITE_API_URL}api/create-contract`,
@@ -271,7 +282,7 @@ const AddContract = () => {
         throw new Error("Gagal menyimpan data kontrak.");
       } else {
         setRetry(false);
-        navigate(`/customer/contract/${id}`, {
+        navigate("/contract", {
           state: {
             message: "Data Kontrak Berhasil Ditambahkan!",
             severity: "success",
@@ -325,11 +336,10 @@ const AddContract = () => {
                 {...register("no_cus")}
                 error={!!errors.no_cus}
                 helperText={errors.no_cus?.message}
-                disabled
               />
             </Grid>
             {/* Button Search */}
-            {/* <Grid size={{ xs: 12, md: 6 }}>
+            <Grid size={{ xs: 12, md: 6 }}>
               <Button
                 type="button"
                 name="search"
@@ -341,7 +351,7 @@ const AddContract = () => {
               >
                 {loading ? <CircularProgress size={24} /> : "Search"}
               </Button>
-            </Grid> */}
+            </Grid>
             <Grid container spacing={5}>
               {/* Accordion 1 - Non Input */}
               <Grid size={12}>
@@ -363,15 +373,32 @@ const AddContract = () => {
                       {/* Row 1 */}
                       <Grid size={{ xs: 12, md: 12 }}>
                         <Typography>
-                          Nama Pelanggan : {displayValue(customer?.nama_cus)}
+                          Nama Pelanggan :{" "}
+                          {displayValue(customer?.["d:Sell_to_Customer_Name"])}
                         </Typography>
                         <Typography>
-                          Alias : {displayValue(customer?.alias)}
+                          Alias :{" "}
+                          {displayValue(customer?.["d:Sell_to_Customer_Name"])}
                         </Typography>
                         <Typography>
-                          Alamat : {displayValue(customer?.alamat)}
+                          Alamat :{" "}
+                          {displayValue(customer?.["d:Sell_to_Address"])}
+                        </Typography>
+                        <Typography>
+                          Penanggung Jawab :{" "}
+                          {displayValue(customer?.["d:Penanggung_jawab"])}
                         </Typography>
                       </Grid>
+                      {/* Row 2 */}
+                      {/* <Grid size={{ xs: 12, md: 6 }}>
+                        <Grid>
+                          <Typography>Kode Area :</Typography>
+                          <Typography>Group :</Typography>
+                        </Grid>
+                        <Typography>Supervisor :</Typography>
+                        <Typography>Teknisi :</Typography>
+                        <Typography>C.S.O :</Typography>
+                      </Grid> */}
                     </Grid>
                   </AccordionDetails>
                 </Accordion>
@@ -396,38 +423,29 @@ const AddContract = () => {
                     <Grid container spacing={5}>
                       <Grid size={{ xs: 12, md: 6 }}>
                         <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
-                          Status Kontrak
+                          Tipe Service
                         </Typography>
                         <Controller
                           name="type_service"
                           control={control}
                           render={({ field }) => (
-                            <FormControl
+                            <Select
+                              {...field}
+                              variant="outlined"
                               fullWidth
-                              error={!!errors.type_service}
+                              displayEmpty
                             >
-                              <Select
-                                {...field}
-                                variant="outlined"
-                                displayEmpty
-                              >
-                                <MenuItem disabled value="">
-                                  <em>Pilih Status Kontrak</em>
-                                </MenuItem>
-                                {Object.entries(selectService).map(
-                                  ([value, label]) => (
-                                    <MenuItem key={value} value={value}>
-                                      {label}
-                                    </MenuItem>
-                                  )
-                                )}
-                              </Select>
-                              {errors.type_service && (
-                                <FormHelperText>
-                                  {errors.type_service.message}
-                                </FormHelperText>
+                              <MenuItem disabled value="">
+                                <em>Pilih Tipe Service</em>
+                              </MenuItem>
+                              {Object.entries(selectService).map(
+                                ([value, label]) => (
+                                  <MenuItem key={value} value={value}>
+                                    {label}
+                                  </MenuItem>
+                                )
                               )}
-                            </FormControl>
+                            </Select>
                           )}
                         />
                       </Grid>

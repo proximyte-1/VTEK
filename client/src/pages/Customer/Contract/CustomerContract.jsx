@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import {
   Container,
   Button,
@@ -11,13 +11,14 @@ import {
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import axios from "axios";
-import { useAlert } from "../../utils/alert";
+import { useAlert } from "../../../utils/alert";
 import { Margin } from "@mui/icons-material";
 import dayjs from "dayjs";
+import VisibilityIcon from "@mui/icons-material/Visibility";
 import EditIcon from "@mui/icons-material/Edit";
-import AssignmentIcon from "@mui/icons-material/Assignment";
 
-const Customer = () => {
+const CustomerContract = () => {
+  const { id } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -30,10 +31,15 @@ const Customer = () => {
         return params.api.getAllRowIds().indexOf(params.id) + 1;
       },
     },
-    { field: "no_cus", headerName: "No. Customer", flex: 1 },
-    { field: "nama_cus", headerName: "Nama Customer", flex: 1 },
-    { field: "alamat", headerName: "Alamat", flex: 1 },
-    { field: "alias", headerName: "Alias", flex: 1 },
+    { field: "no_contract", headerName: "No. Kontrak", flex: 1 },
+    { field: "type_service", headerName: "Status Kontrak", flex: 1 },
+    {
+      field: "tgl_contract",
+      headerName: "Tanggal Kontrak",
+      flex: 1,
+      renderCell: (params) =>
+        params.value ? dayjs(params.value).format("DD-MM-YYYY") : "-",
+    },
     {
       field: "actions",
       headerName: "Actions",
@@ -46,16 +52,17 @@ const Customer = () => {
           <IconButton
             variant="contained"
             sx={{ marginX: 0.5 }}
-            onClick={() => navigate(`edit/${params.row.id}`)}
+            onClick={() => navigate(`view/${params.row.id}`)}
           >
-            <EditIcon />
+            <VisibilityIcon />
           </IconButton>
+
           <IconButton
             variant="contained"
             sx={{ marginX: 0.5 }}
-            onClick={() => navigate(`contract/${params.row.id}`)}
+            onClick={() => navigate(`edit/${params.row.id}`)}
           >
-            <AssignmentIcon />
+            <EditIcon />
           </IconButton>
         </>
       ),
@@ -70,7 +77,8 @@ const Customer = () => {
     async function fetchContract() {
       try {
         const response = await axios.get(
-          import.meta.env.VITE_API_URL + `api/get-customer`
+          import.meta.env.VITE_API_URL +
+            `api/get-contract-by-customer-id?id=${id}`
         );
 
         setDatas(response.data);
@@ -89,7 +97,7 @@ const Customer = () => {
   return (
     <Container>
       <Typography variant="h4" gutterBottom>
-        Master Customer VTK
+        List Kontrak
       </Typography>
       <Box sx={{ width: "100%", overflowX: "auto" }}>
         <Box sx={{ minWidth: 700 }}>
@@ -140,4 +148,4 @@ const Customer = () => {
   );
 };
 
-export default Customer;
+export default CustomerContract;

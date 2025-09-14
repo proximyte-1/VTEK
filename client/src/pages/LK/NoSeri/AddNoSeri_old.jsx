@@ -74,16 +74,15 @@ const AddNoSeri = () => {
   const schemaNoSeri = useMemo(() => {
     return yup.object().shape({
       no_seri: yup.string().required(),
+      no_call: yup.string().required(),
       no_fd: yup.string().required(),
       no_lap: yup.string().required(),
-      // HIDE DETAIL CALL
-      // no_call: yup.string().required(),
-      // pelapor: yup.string().required(),
-      // waktu_call: yup.date().required(),
-      // waktu_dtg: yup.date().required(),
-      // status_call: yup.string().required(),
-      // keluhan: yup.string().required(),
-      // kat_keluhan: yup.string().required(),
+      pelapor: yup.string().required(),
+      waktu_call: yup.date().required(),
+      waktu_dtg: yup.date().required(),
+      status_call: yup.string().required(),
+      keluhan: yup.string().required(),
+      kat_keluhan: yup.string().required(),
       problem: yup.string().required(),
       kat_problem: yup.string().required(),
       solusi: yup.string().required(),
@@ -161,7 +160,7 @@ const AddNoSeri = () => {
             ),
         otherwise: (schema) => schema.nullable().notRequired(),
       }),
-      // id_teknisi: yup.number().required(),
+      id_teknisi: yup.number().required(),
     });
   }, [lastService]);
 
@@ -213,8 +212,7 @@ const AddNoSeri = () => {
           if (customer) {
             await fetchLastService(displayValue(customer["d:Serial_No"]));
             await fetchDataContract(
-              displayValue(customer["d:Sell_to_Customer_No"]),
-              displayValue(customer["d:Serial_No"])
+              displayValue(customer["d:Sell_to_Customer_No"])
             );
             await fetchContRes(
               customer["d:Sell_to_Customer_No"],
@@ -236,7 +234,7 @@ const AddNoSeri = () => {
   }, [initialData]); // Rerun when initialData changes
 
   let statusRes = watch("status_res");
-  // let waktuCall = watch("waktu_call");
+  let waktuCall = watch("waktu_call");
   let waktuMulai = watch("waktu_mulai");
 
   const fetchDataCustomer = async (inst_data) => {
@@ -355,14 +353,13 @@ const AddNoSeri = () => {
     }
   };
 
-  const fetchDataContract = async (no_cus, no_seri) => {
+  const fetchDataContract = async (no_cus) => {
     try {
       const response = await axios.get(
         `${import.meta.env.VITE_API_URL}api/get-contract-lk`,
         {
           params: {
             no_cus: no_cus,
-            no_seri: no_seri,
           },
         }
       );
@@ -479,16 +476,22 @@ const AddNoSeri = () => {
       });
 
       if (customer) {
-        const dataLastService = await fetchLastService(displayValue(noSeri));
-
-        const dataContract = await fetchDataContract(
-          displayValue(noCus),
-          displayValue(noSeri)
+        const dataLastService = await fetchLastService(
+          displayValue(customer["d:Serial_No"])
         );
 
-        const dataArea = await fetchDataArea(displayValue(noCus));
+        const dataContract = await fetchDataContract(
+          displayValue(customer["d:Sell_to_Customer_No"])
+        );
 
-        await fetchContRes(noCus, noSeri);
+        const dataArea = await fetchDataArea(
+          displayValue(customer["d:Sell_to_Customer_No"])
+        );
+
+        await fetchContRes(
+          customer["d:Sell_to_Customer_No"],
+          customer["d:Serial_No"]
+        );
       }
 
       setExpand(false);
@@ -502,23 +505,6 @@ const AddNoSeri = () => {
 
   const handleFileSelect = (file) => {
     setValue("pic", file, { shouldValidate: true });
-  };
-
-  const mapTeknisi = async (no_lap) => {
-    const kode_teknisi = no_lap.slice(0, 3);
-
-    try {
-      const response = await axios.get(
-        `${
-          import.meta.env.VITE_API_URL
-        }api/get-teknisi-lk-by-kode-teknisi?kode_teknisi=${kode_teknisi}`
-      );
-
-      const data = response.data;
-    } catch (error) {
-      console.error("Error fetching data teknisi:", error);
-      showAlert("Gagal mengambil data teknisi", "error");
-    }
   };
 
   const onSubmit = async (values) => {
@@ -546,11 +532,8 @@ const AddNoSeri = () => {
         }
       });
 
-      const id_teknisi = await mappingTeknisi(getValues("no_lap"));
-
       data.append("created_by", user?.id_user || "0");
       data.append("status_appr", "2");
-      data.append("id_teknisi", id_teknisi);
 
       const response = await axios.post(
         import.meta.env.VITE_API_URL + `api/create-flk`,
@@ -558,21 +541,20 @@ const AddNoSeri = () => {
       );
 
       const { data: result } = response;
-      const reportId = result?.data?.id;
+      const reportId = result.data.id;
 
-      // const apprPayload = {
-      //   id_lk: reportId,
-      //   id_area: area.id_area || 0,
-      //   approved: 2,
-      // };
+      const apprPayload = {
+        id_lk: reportId,
+        id_area: area.id_area || 0,
+        approved: 2,
+      };
 
-      // const apprResponse = await axios.post(
-      //   `${import.meta.env.VITE_API_URL}api/create-approval`,
-      //   apprPayload
-      // );
+      const apprResponse = await axios.post(
+        `${import.meta.env.VITE_API_URL}api/create-approval`,
+        apprPayload
+      );
 
-      // if (!apprResponse.data.ok) {
-      if (!reportId) {
+      if (!apprResponse.data.ok) {
         throw new Error("Gagal menyimpan data utama.");
       } else {
         setRetry(false);
@@ -704,18 +686,6 @@ const AddNoSeri = () => {
                       >
                         {loading ? <CircularProgress size={24} /> : "Select"}
                       </Button>
-                      <Button
-                        type="button"
-                        name="search"
-                        id="search"
-                        variant="contained"
-                        color="primary"
-                        onClick={handleNoSeriSearch}
-                        sx={{ marginTop: 2 }}
-                        disabled={loading || (initialData ? true : false)}
-                      >
-                        {loading ? <CircularProgress size={24} /> : "Contoh"}
-                      </Button>
                     </AccordionDetails>
                   </Accordion>
                 </Grid>
@@ -817,7 +787,7 @@ const AddNoSeri = () => {
                       <Grid size={{ xs: 12, sm: 6, md: 4 }}>
                         <Typography>
                           Tanggal Instalasi :{" "}
-                          {displayFormatDate(contract?.tgl_instalasi)}
+                          {displayFormatDate(instalasi?.tgl_instalasi)}
                         </Typography>
                         <Typography>
                           Tanggal Kontrak :{" "}
@@ -891,7 +861,7 @@ const AddNoSeri = () => {
                         />
                       </Grid>
 
-                      {/* <Grid size={{ xs: 12, md: 6 }}>
+                      <Grid size={{ xs: 12, md: 6 }}>
                         <FormControl fullWidth required>
                           <Typography sx={{ color: "rgba(0, 0, 0, 0.6)" }}>
                             Pilih Teknisi
@@ -919,14 +889,14 @@ const AddNoSeri = () => {
                             )}
                           />
                         </FormControl>
-                      </Grid> */}
+                      </Grid>
                     </Grid>
                   </AccordionDetails>
                 </Accordion>
               </Grid>
 
               {/* Accordion 3 */}
-              {/* <Grid size={12}>
+              <Grid size={12}>
                 <Accordion
                   disabled={!searched || !getValues("no_seri")}
                   expanded={!expand}
@@ -1130,7 +1100,7 @@ const AddNoSeri = () => {
                     </Grid>
                   </AccordionDetails>
                 </Accordion>
-              </Grid> */}
+              </Grid>
 
               {/* Accordion 4 */}
               <Grid size={12}>

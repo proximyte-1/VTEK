@@ -32,7 +32,6 @@ function MultipleItemTableInputArea({ value, onChange, teknisiOptions }) {
   // Local state for the "new item" input fields only
   const [newItem, setNewItem] = useState({
     kode_area: "",
-    nama_area: "",
     teknisi: [], // Change to store the selected teknisi object
   });
 
@@ -52,11 +51,7 @@ function MultipleItemTableInputArea({ value, onChange, teknisiOptions }) {
   };
 
   const handleAddItem = () => {
-    if (
-      newItem.kode_area.trim() !== "" &&
-      newItem.nama_area.trim() !== "" &&
-      newItem.teknisi.length > 0
-    ) {
+    if (newItem.kode_area.trim() !== "" && newItem.teknisi.length > 0) {
       const newItemWithId = {
         ...newItem,
         id: Date.now().toString(),
@@ -102,7 +97,6 @@ function MultipleItemTableInputArea({ value, onChange, teknisiOptions }) {
                 <TableCell sx={{ fontWeight: "bold", width: "150px" }}>
                   Kode Area
                 </TableCell>
-                <TableCell sx={{ fontWeight: "bold" }}>Nama Area</TableCell>
                 <TableCell sx={{ fontWeight: "bold", width: "450px" }}>
                   Teknisi
                 </TableCell>
@@ -123,21 +117,6 @@ function MultipleItemTableInputArea({ value, onChange, teknisiOptions }) {
                         handleItemFieldChange(
                           item.id,
                           "kode_area",
-                          e.target.value
-                        )
-                      }
-                      fullWidth
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <TextField
-                      variant="outlined"
-                      value={item.nama_area}
-                      onChange={(e) =>
-                        handleItemFieldChange(
-                          item.id,
-                          "nama_area",
                           e.target.value
                         )
                       }
@@ -208,23 +187,6 @@ function MultipleItemTableInputArea({ value, onChange, teknisiOptions }) {
                   />
                 </TableCell>
                 <TableCell>
-                  <TextField
-                    placeholder="Nama Area"
-                    variant="outlined"
-                    name="nama_area"
-                    value={newItem.nama_area}
-                    onChange={handleNewItemChange}
-                    fullWidth
-                    size="small"
-                    onKeyPress={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        handleAddItem();
-                      }
-                    }}
-                  />
-                </TableCell>
-                <TableCell>
                   <Autocomplete
                     multiple
                     filterSelectedOptions
@@ -259,7 +221,6 @@ function MultipleItemTableInputArea({ value, onChange, teknisiOptions }) {
                     color="primary"
                     size="small"
                     disabled={
-                      newItem.nama_area.trim() === "" ||
                       newItem.kode_area.trim() === "" ||
                       newItem.teknisi === null
                     }
